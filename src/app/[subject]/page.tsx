@@ -1,83 +1,155 @@
 "use client";
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo, useCallback, memo } from 'react';
 import { 
-  FileText, ArrowLeft, Download, Loader2, CheckCircle2, 
-  Trophy, Beaker, X, ExternalLink, GraduationCap 
+  ArrowLeft, Download, Loader2, CheckCircle2, 
+  Beaker, X, GraduationCap, ChevronDown, AlertTriangle, Clock
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LanguageContext } from '../layout';
 import { translations } from '../translations';
-// 1. IMPORT THE BOOKMARK BUTTON
 import BookmarkButton from '@/app/components/BookmarkButton'; 
+
+// --- OPTIMIZATION: Memoized Chapter Item ---
+// This prevents the whole list from re-rendering when progress is toggled
+const ChapterItem = memo(({ chap, isDone, userId, onPreview, onToggle, getDownloadUrl }: any) => (
+  <div className={`p-4 rounded-3xl border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 group transition-all hover:bg-white/[0.02] ${isDone ? 'border-emerald-500/20' : ''}`}>
+    <div className="flex items-center gap-4 flex-grow">
+      <button onClick={() => onToggle(chap.id)} className={`transition-all ${isDone ? 'text-emerald-500' : 'opacity-20 hover:opacity-100'}`}>
+        <CheckCircle2 size={28} fill={isDone ? "currentColor" : "none"} />
+      </button>
+      <div>
+        <h3 className={`font-black text-lg ${isDone ? 'opacity-30 line-through' : ''}`}>{chap.title}</h3>
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-20 italic">Academic Resource</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-2 w-full md:w-auto">
+      {userId && (
+        <BookmarkButton 
+          resourceId={chap.id} 
+          resourceName={chap.title} 
+          resource_url={chap.file_url} 
+          userId={userId} 
+        />
+      )}
+      <button 
+        onClick={() => onPreview({url: chap.file_url, title: chap.title})}
+        className="flex-1 md:flex-none px-6 py-3 rounded-2xl bg-white/5 text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
+      >
+        <GraduationCap size={16} /> Preview
+      </button>
+      <a 
+        href={getDownloadUrl(chap.file_url)} 
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex-1 md:flex-none px-6 py-3 rounded-2xl bg-[#3A6EA5] text-[10px] font-black uppercase tracking-widest hover:bg-[#2d5682] transition-all flex items-center justify-center gap-2"
+      >
+        <Download size={16} /> Download
+      </a>
+    </div>
+  </div>
+));
+ChapterItem.displayName = "ChapterItem";
 
 export default function SubjectPage() {
   const { subject: slug } = useParams();
-  const { lang } = useContext(LanguageContext);
+  const { lang, setNavVisible } = useContext(LanguageContext);
   const t = translations[lang as 'en' | 'fr'];
 
-  const [parent, setParent] = useState<any>(null);
-  const [subSubjects, setSubSubjects] = useState<any[]>([]);
-  const [chapters, setChapters] = useState<any[]>([]);
+  const [data, setData] = useState<{parent: any, subs: any[], chapters: any[]}>({
+    parent: null, subs: [], chapters: []
+  });
   const [loading, setLoading] = useState(true);
-  const [completedChapters, setCompletedChapters] = useState<string[]>([]);
+  const [completedChapters, setCompletedChapters] = useState<Set<string>>(new Set()); // Use Set for O(1) lookup
   const [userId, setUserId] = useState<string | null>(null);
-  const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
+  const [selectedPdf, setSelectedPdf] = useState<{url: string, title: string} | null>(null);
+  const [openSections, setOpenSections] = useState<string[]>([]);
 
+  // --- OPTIMIZATION: Parallel Fetching ---
   useEffect(() => {
-    async function getData() {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      setUserId(user?.id || null);
+    async function fetchData() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUserId(user?.id || null);
 
-      const { data: p } = await supabase.from('subjects').select('*').eq('slug', slug).single();
-      const { data: subs } = await supabase.from('subjects').select('*').eq('parent_slug', slug).order('title', { ascending: true });
-      const subSlugs = subs?.map(s => s.slug) || [];
-      const { data: chaps } = await supabase.from('chapters').select('*').in('subject_key', subSlugs).order('title', { ascending: true });
+        // Run queries in parallel
+        const [parentRes, subsRes] = await Promise.all([
+          supabase.from('subjects').select('*').eq('slug', slug).single(),
+          supabase.from('subjects').select('*').eq('parent_slug', slug).order('title', { ascending: true })
+        ]);
 
-      if (user) {
-        const { data: progress } = await supabase.from('user_progress').select('chapter_id').eq('user_id', user.id);
-        if (progress) setCompletedChapters(progress.map((p: any) => p.chapter_id));
+        const subSlugs = subsRes.data?.map(s => s.slug) || [];
+        
+        // Fetch chapters and user progress in parallel
+        const [chapsRes, progressRes] = await Promise.all([
+          supabase.from('chapters').select('*').in('subject_key', subSlugs).order('title', { ascending: true }),
+          user ? supabase.from('user_progress').select('chapter_id').eq('user_id', user.id) : Promise.resolve({ data: [] })
+        ]);
+
+        setData({
+          parent: parentRes.data,
+          subs: subsRes.data || [],
+          chapters: chapsRes.data || []
+        });
+
+        if (progressRes.data) {
+          setCompletedChapters(new Set(progressRes.data.map((p: any) => p.chapter_id)));
+        }
+        
+        if (subsRes.data?.length) setOpenSections([subsRes.data[0].id]);
+      } catch (err) {
+        console.error("Fetch Error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      setParent(p);
-      setSubSubjects(subs || []);
-      setChapters(chaps || []);
-      setLoading(false);
     }
-    getData();
+    fetchData();
   }, [slug]);
 
-  const getEmbedUrl = (url: string) => {
+  // --- OPTIMIZATION: Memoized Helpers ---
+  const getDownloadUrl = useCallback((url: string) => {
+    if (!url || !url.includes('drive.google.com')) return url;
+    const fileId = url.split('/d/')[1]?.split('/')[0];
+    return fileId ? `https://drive.google.com/uc?export=download&id=${fileId}` : url;
+  }, []);
+
+  const getEmbedUrl = useCallback((url: string) => {
     if (!url) return "";
-    if (url.includes('drive.google.com')) {
-      return url.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
-    }
-    return url;
-  };
-
-  const totalInModule = chapters.length;
-  const totalDone = chapters.filter(c => completedChapters.includes(c.id)).length;
-  const percentDone = totalInModule > 0 ? Math.round((totalDone / totalInModule) * 100) : 0;
-  const isMastered = percentDone === 100 && totalInModule > 0;
-
-  const radius = 28;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentDone / 100) * circumference;
+    return url.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
+  }, []);
 
   const toggleProgress = async (chapterId: string) => {
-    if (!userId) return alert(t.unauthorized || "Please login");
-    const isDone = completedChapters.includes(chapterId);
+    if (!userId) return alert("Please login");
+    const isDone = completedChapters.has(chapterId);
+    
+    // Optimistic UI Update
+    setCompletedChapters(prev => {
+      const next = new Set(prev);
+      isDone ? next.delete(chapterId) : next.add(chapterId);
+      return next;
+    });
+
     if (isDone) {
-      const { error } = await supabase.from('user_progress').delete().eq('user_id', userId).eq('chapter_id', chapterId);
-      if (!error) setCompletedChapters(prev => prev.filter(id => id !== chapterId));
+      await supabase.from('user_progress').delete().eq('user_id', userId).eq('chapter_id', chapterId);
     } else {
-      const { error } = await supabase.from('user_progress').insert([{ user_id: userId, chapter_id: chapterId }]);
-      if (!error) setCompletedChapters(prev => [...prev, chapterId]);
+      await supabase.from('user_progress').insert([{ user_id: userId, chapter_id: chapterId }]);
     }
   };
+
+  const progressStats = useMemo(() => {
+    const total = data.chapters.length;
+    const done = data.chapters.filter(c => completedChapters.has(c.id)).length;
+    return {
+      total,
+      done,
+      percent: total > 0 ? Math.round((done / total) * 100) : 0
+    };
+  }, [data.chapters, completedChapters]);
+
+  const handleOpenPdf = (pdf: any) => { setSelectedPdf(pdf); setNavVisible(false); };
+  const handleClosePdf = () => { setSelectedPdf(null); setNavVisible(true); };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#050505]">
@@ -86,173 +158,107 @@ export default function SubjectPage() {
   );
 
   return (
-    <main className="max-w-5xl mx-auto px-5 md:px-6 py-8 md:py-12 min-h-screen relative text-white">
-      
-      <Link href="/" className="group inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em] mb-8 md:mb-12 opacity-50 hover:opacity-100 hover:text-[#3A6EA5] transition-all">
-        <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> {t.back}
+    <main className="max-w-5xl mx-auto px-5 md:px-6 py-8 md:py-12 min-h-screen text-white">
+      <Link href="/" className="group inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em] mb-12 opacity-50 hover:opacity-100 transition-all">
+        <ArrowLeft size={14} className="group-hover:-translate-x-1" /> {t.back}
       </Link>
 
-      <header className="mb-12 md:mb-20">
+      <header className="mb-20">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-10">
-          <div className="flex-grow">
-            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2 text-amber-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest mb-4">
-              <Beaker size={14} /> LU {parent?.slug?.toUpperCase()} UNIT
-            </motion.div>
-            <div className="flex items-center gap-4 md:gap-6">
-               <span className="text-6xl md:text-8xl">{parent?.icon}</span>
+          <div>
+            <div className="flex items-center gap-2 text-amber-500 font-black text-[10px] uppercase tracking-widest mb-4">
+              <Beaker size={14} /> LU {data.parent?.slug?.toUpperCase()} UNIT
+            </div>
+            <div className="flex items-center gap-6">
+               <span className="text-6xl md:text-8xl">{data.parent?.icon}</span>
                <div>
-                  <h1 className="text-3xl md:text-7xl font-black tracking-tighter uppercase leading-none italic brand-gradient">
-                    {parent?.title}
-                  </h1>
-                  <p className="text-[#3A6EA5] font-black tracking-[0.2em] uppercase text-[9px] md:text-[10px] mt-2 md:mt-4 opacity-60">
-                    Faculty of Science • L1
-                  </p>
+                  <h1 className="text-4xl md:text-7xl font-black tracking-tighter uppercase italic leading-none">{data.parent?.title}</h1>
+                  <p className="text-[#3A6EA5] font-black tracking-[0.2em] uppercase text-[10px] mt-4 opacity-60 italic">Faculty of Science • L1</p>
                </div>
             </div>
           </div>
 
-          <motion.div whileHover={{ scale: 1.05 }} className="flex items-center gap-4 md:gap-6 p-4 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-white/10 glass-card shadow-xl self-start md:self-auto">
-            <div className="relative w-14 h-14 md:w-16 md:h-16 flex items-center justify-center">
-              <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 64 64">
-                <circle cx="32" cy="32" r={radius} stroke="white" strokeWidth="6" fill="transparent" className="opacity-10" />
+          <div className="flex items-center gap-6 p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/10 backdrop-blur-md">
+            <div className="relative w-16 h-16 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="5" fill="transparent" className="text-white/5" />
                 <motion.circle 
-                    cx="32" cy="32" r={radius} stroke="#3A6EA5" strokeWidth="6" fill="transparent" 
-                    strokeDasharray={circumference} 
-                    animate={{ strokeDashoffset }} 
-                    strokeLinecap="round" 
-                    transition={{ duration: 1, ease: "easeOut" }}
+                  cx="32" cy="32" r="28" stroke="#3A6EA5" strokeWidth="5" fill="transparent" 
+                  strokeDasharray={175.9} 
+                  animate={{ strokeDashoffset: 175.9 - (progressStats.percent / 100) * 175.9 }}
                 />
               </svg>
-              <span className="absolute text-[9px] md:text-[10px] font-black text-[#3A6EA5]">{percentDone}%</span>
+              <span className="absolute text-[10px] font-black text-[#3A6EA5]">{progressStats.percent}%</span>
             </div>
             <div>
-              <p className="text-[8px] md:text-[9px] font-black uppercase tracking-widest text-[#3A6EA5]">{t.status}</p>
-              <p className="text-lg md:text-xl font-black">{totalDone}<span className="opacity-20 mx-1">/</span>{totalInModule}</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[#3A6EA5]">Progress</p>
+              <p className="text-2xl font-black">{progressStats.done}<span className="opacity-20 mx-1">/</span>{progressStats.total}</p>
             </div>
-          </motion.div>
+          </div>
         </div>
-
-        <AnimatePresence>
-          {isMastered && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-8 p-6 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
-                <Trophy size={20} />
-              </div>
-              <div>
-                <h3 className="font-black text-sm md:text-base text-emerald-500 uppercase tracking-tight">{t.mastered}</h3>
-                <p className="text-[11px] md:text-xs opacity-70">{t.congrats}</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </header>
 
-      <div className="space-y-12 md:space-y-20">
-        {subSubjects.map((sub: any) => (
-          <section key={sub.id} className="relative">
-            <div className="sticky top-0 md:top-24 z-10 py-4 bg-[#050505]/95 backdrop-blur-sm flex items-center gap-3 md:gap-4 mb-6 md:mb-8 border-b border-[#3A6EA5]/20">
-              <span className="text-2xl md:text-3xl filter drop-shadow-md">{sub.icon}</span>
-              <h2 className="text-xl md:text-3xl font-black tracking-tighter uppercase italic">{sub.title}</h2>
-              <div className="ml-auto text-[8px] md:text-[10px] font-mono opacity-30 uppercase tracking-widest hidden sm:block">
-                Code: {sub.slug}
-              </div>
-            </div>
-            
-            <div className="grid gap-3 md:gap-4">
-              {chapters.filter((c: any) => c.subject_key === sub.slug).map((chap: any) => {
-                const isDone = completedChapters.includes(chap.id);
-                return (
-                  <motion.div 
-                    key={chap.id} 
-                    layout
-                    className={`p-1 pl-4 md:pl-6 rounded-[1.5rem] md:rounded-[2rem] flex flex-col md:flex-row justify-between items-stretch md:items-center border border-white/5 transition-all duration-500 glass-card group ${isDone ? 'border-emerald-500/50 bg-emerald-500/[0.02]' : 'hover:border-[#3A6EA5]/50'}`}
-                  >
-                    <div className="flex items-center gap-4 md:gap-6 py-3 md:py-4 flex-grow">
-                      <button 
-                        onClick={() => toggleProgress(chap.id)} 
-                        className={`transition-all duration-300 transform active:scale-75 shrink-0 ${isDone ? 'text-emerald-500' : 'opacity-20 hover:opacity-100'}`}
-                      >
-                        <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7" fill={isDone ? "currentColor" : "none"} />
-                      </button>
-                      <div className="flex flex-col">
-                        <span className={`font-black text-sm md:text-lg tracking-tight transition-all leading-tight ${isDone ? 'opacity-30 line-through' : ''}`}>
-                          {chap.title}
-                        </span>
-                        <div className="flex items-center gap-2 mt-1">
-                           <FileText size={10} className="opacity-30" />
-                           <span className="text-[8px] md:text-[9px] font-bold uppercase tracking-widest opacity-30 italic">Module Reference</span>
+      <div className="space-y-6">
+        {data.subs.map((sub: any) => {
+          const isOpen = openSections.includes(sub.id);
+          const subChapters = data.chapters.filter((c: any) => c.subject_key === sub.slug);
+
+          return (
+            <section key={sub.id} className="border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.01]">
+              <button 
+                onClick={() => setOpenSections(prev => prev.includes(sub.id) ? prev.filter(i => i !== sub.id) : [...prev, sub.id])}
+                className={`w-full sticky top-0 z-20 flex items-center justify-between p-6 md:p-8 transition-all backdrop-blur-xl ${isOpen ? 'bg-[#3A6EA5]/10 border-b border-[#3A6EA5]/20' : 'hover:bg-white/[0.03]'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-2xl">{sub.icon}</span>
+                  <h2 className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">{sub.title}</h2>
+                </div>
+                <ChevronDown className={`transition-transform duration-500 ${isOpen ? 'rotate-180 text-[#3A6EA5]' : 'opacity-20'}`} />
+              </button>
+
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                    <div className="p-4 md:p-8 space-y-4">
+                      {subChapters.length > 0 ? (
+                        subChapters.map((chap: any) => (
+                          <ChapterItem 
+                            key={chap.id}
+                            chap={chap}
+                            isDone={completedChapters.has(chap.id)}
+                            userId={userId}
+                            onPreview={handleOpenPdf}
+                            onToggle={toggleProgress}
+                            getDownloadUrl={getDownloadUrl}
+                          />
+                        ))
+                      ) : (
+                        <div className="py-20 flex flex-col items-center opacity-30">
+                          <Clock size={24} className="mb-4" />
+                          <h4 className="font-black uppercase text-xs">Under Maintenance</h4>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 p-1.5 md:p-2 w-full md:w-auto">
-                      {/* 2. INSERT BOOKMARK BUTTON COMPONENT HERE */}
-                      {userId && (
-                       <BookmarkButton 
-  resourceId={chap.id} 
-  resourceName={chap.title} 
-  resource_url={chap.file_url} // <--- ADD THIS LINE
-  userId={userId} 
-/>
                       )}
-
-                      <button 
-                        onClick={() => setSelectedPdf(chap.file_url)}
-                        className="flex-1 md:flex-none text-center px-4 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/10 text-[9px] font-black uppercase tracking-widest opacity-60 hover:opacity-100 hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2" 
-                      >
-                        <GraduationCap size={14} className="shrink-0" /> <span className="md:inline">{t.preview}</span>
-                      </button>
-                      
-                      <a href={chap.file_url} target="_blank" rel="noopener noreferrer" className="flex-1 md:flex-none text-center px-4 md:px-8 py-2.5 md:py-3 rounded-xl md:rounded-2xl font-black text-[9px] uppercase tracking-widest bg-[#3A6EA5] text-white hover:bg-[#2d5682] shadow-lg transition-all flex items-center justify-center gap-2">
-                        <Download size={14} className="shrink-0" /> <span className="md:inline">{t.download}</span>
-                      </a>
                     </div>
                   </motion.div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+                )}
+              </AnimatePresence>
+            </section>
+          );
+        })}
       </div>
 
+      {/* Reader Modal stays same logic but uses getEmbedUrl helper */}
       <AnimatePresence>
         {selectedPdf && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setSelectedPdf(null)}
-              className="absolute inset-0 bg-black/95 backdrop-blur-md"
-            />
-            
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 30 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 30 }}
-              className="relative w-full h-[100dvh] md:h-full max-w-6xl bg-[#0a0a0a] md:rounded-[2.5rem] border-x md:border border-white/10 overflow-hidden flex flex-col shadow-2xl"
-            >
-              <div className="p-3 md:p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                <div className="flex items-center gap-3 ml-2 md:ml-4">
-                  <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#3A6EA5]/20 flex items-center justify-center">
-                    <GraduationCap className="text-[#3A6EA5] w-[14px] h-[14px] md:w-4 md:h-4" />
-                  </div>
-                  <span className="font-black uppercase text-[8px] md:text-[10px] tracking-widest opacity-50">Reader Mode</span>
-                </div>
-                <div className="flex gap-1.5 md:gap-2">
-                  <a href={selectedPdf} target="_blank" className="p-2.5 md:p-3 hover:bg-white/5 rounded-xl transition-all text-white/40 hover:text-white">
-                    <ExternalLink size={18} />
-                  </a>
-                  <button onClick={() => setSelectedPdf(null)} className="p-2.5 md:p-3 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-xl transition-all">
-                    <X size={18} />
-                  </button>
-                </div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={handleClosePdf} className="absolute inset-0 bg-black/95 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full h-full max-w-6xl bg-[#0a0a0a] md:rounded-[3rem] border border-white/10 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                <span className="font-black uppercase text-[10px] tracking-[0.2em] px-4">{selectedPdf.title}</span>
+                <button onClick={handleClosePdf} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all"><X size={18} /></button>
               </div>
-
-              <div className="flex-grow bg-white relative">
-                <iframe 
-                  src={getEmbedUrl(selectedPdf)}
-                  className="w-full h-full border-none"
-                  allow="autoplay"
-                />
+              <div className="flex-grow bg-white">
+                <iframe src={getEmbedUrl(selectedPdf.url)} className="w-full h-full border-none" loading="lazy" />
               </div>
             </motion.div>
           </div>

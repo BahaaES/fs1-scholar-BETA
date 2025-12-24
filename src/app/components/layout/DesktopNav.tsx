@@ -1,0 +1,90 @@
+"use client";
+import { useState, useRef, useEffect } from "react";
+import Link from 'next/link';
+import { supabase } from "@/lib/supabase";
+import { 
+  GraduationCap, Clock, ChevronDown, LayoutDashboard, 
+  ShieldCheck, Globe, LogOut 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import GlobalSearch from "../GlobalSearch"; // Adjust path as needed
+
+export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <nav className="hidden md:block bg-black/40 backdrop-blur-xl text-white p-4 sticky top-0 z-50 border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+      <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
+        {/* LOGO SECTION */}
+        <Link href="/" className="flex items-center gap-3 group transition-transform active:scale-95">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg rotate-3 group-hover:rotate-0 transition-transform">
+            <GraduationCap className="text-[#3A6EA5]" size={24} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl font-black tracking-tighter leading-none italic uppercase">
+              LU <span className="text-amber-400">SCIENCE</span> HUB
+            </span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.1em] opacity-60">
+              Faculty of Science • L1 {lang === 'en' ? 'Bio' : 'Bio'}
+            </span>
+          </div>
+        </Link>
+        
+        {/* RIGHT SECTION */}
+        <div className="flex items-center gap-4">
+          <GlobalSearch />
+          
+          <Link href="/focus" className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group">
+            <Clock size={18} className="text-[#3A6EA5] group-hover:rotate-12 transition-transform" />
+            <span className="text-xs font-bold uppercase tracking-wider">Focus Mode</span>
+          </Link>
+
+          {user && (
+            <div className="relative" ref={dropdownRef}>
+              <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 bg-black/20 p-1.5 pr-4 rounded-full border border-white/10 hover:bg-black/30 transition-all">
+                <div className="w-8 h-8 bg-gradient-to-br from-[#3A6EA5] to-purple-600 text-white rounded-full flex items-center justify-center font-bold uppercase shadow-inner text-xs">
+                  {user.email ? user.email[0] : 'U'}
+                </div>
+                <ChevronDown size={14} className={`opacity-40 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <AnimatePresence>
+                {isProfileOpen && (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-4 w-64 bg-[#0a0a0a]/95 backdrop-blur-2xl rounded-[2rem] shadow-2xl p-2 border border-white/10 z-[100]">
+                    <Link href="/dashboard" className="w-full flex items-center gap-3 p-3.5 hover:bg-white/5 rounded-2xl transition-all text-sm font-bold group">
+                       <LayoutDashboard size={18} className="text-[#3A6EA5] group-hover:scale-110 transition-transform" /> Dashboard
+                    </Link>
+                    {isAdmin && (
+                      <Link href="/admin" className="w-full flex items-center gap-3 p-3.5 hover:bg-amber-400/10 rounded-2xl transition-all text-sm font-bold text-amber-400">
+                         <ShieldCheck size={18} /> Admin Panel
+                      </Link>
+                    )}
+                    <button onClick={toggleLang} className="w-full flex items-center justify-between p-3.5 hover:bg-white/5 rounded-2xl transition-all">
+                       <div className="flex items-center gap-3"><Globe size={18} className="text-[#3A6EA5]" /><span className="text-sm font-bold">{lang === 'en' ? 'English' : 'Français'}</span></div>
+                       <span className="text-[9px] font-black bg-[#3A6EA5]/20 text-[#3A6EA5] px-2 py-1 rounded-lg uppercase">{lang === 'en' ? 'FR' : 'EN'}</span>
+                    </button>
+                    <div className="h-[1px] my-2 mx-2 bg-white/5" />
+                    <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-3.5 hover:bg-red-500/10 rounded-2xl transition-all text-sm font-bold text-red-500">
+                      <LogOut size={18} /> Sign Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
