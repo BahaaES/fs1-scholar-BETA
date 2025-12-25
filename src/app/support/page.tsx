@@ -2,9 +2,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion } from 'framer-motion';
-import { Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { Mail, AlertCircle, ArrowRight, X } from 'lucide-react'; // Added X icon
+import { useRouter } from "next/navigation";
 
 export default function SupportPage() {
+  const router = useRouter();
   const [userEmail, setUserEmail] = useState<string>("");
 
   useEffect(() => {
@@ -15,16 +17,36 @@ export default function SupportPage() {
     getUser();
   }, []);
 
-  // 1. Technical Form: Still uses the email auto-fill because you need to reply to them
+  // Exit Logic: Check auth and redirect accordingly
+  const handleExit = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      router.push('/'); // Go to Home if logged in
+    } else {
+      router.push('/auth'); // Go to Login if guest
+    }
+  };
+
   const techFormLink = `https://docs.google.com/forms/d/e/1FAIpQLSczmE_Hpl_CPlFHkAXIeqkyQf0qAy-3ZVGsqblnTtbKTCY-uw/viewform?usp=pp_url&entry.81587044=${encodeURIComponent(userEmail)}`;
-  
-  // 2. Academic Form: Just the direct link you provided (no email tracking)
   const academicFormLink = `https://docs.google.com/forms/d/e/1FAIpQLSdq3c1tAw9loi3_0Dvm0wwkyj0uL-YqHi-10Wss97pYVrLR9w/viewform?usp=dialog`;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white pt-32 pb-20 selection:bg-[#3A6EA5]/30">
+    // Added z-index and relative positioning to ensure it hides the global nav if necessary
+    <div className="min-h-screen bg-[#050505] text-white pt-32 pb-20 selection:bg-[#3A6EA5]/30 relative z-[999]">
+      
+      {/* EXIT BUTTON (Smart X) */}
+      <div className="fixed top-8 right-8 z-[1000]">
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={handleExit}
+          className="p-4 bg-white/5 border border-white/10 rounded-full text-white/40 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 transition-all backdrop-blur-xl"
+        >
+          <X size={24} />
+        </motion.button>
+      </div>
+
       <div className="max-w-5xl mx-auto px-6 text-center">
-        
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <h2 className="text-sm font-black uppercase tracking-[0.4em] text-[#3A6EA5] mb-4">Help Center</h2>
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter uppercase mb-16 leading-none">
@@ -33,7 +55,6 @@ export default function SupportPage() {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-          
           {/* Technical Support Card */}
           <motion.div 
             whileHover={{ y: -5 }}

@@ -7,11 +7,13 @@ import {
   ShieldCheck, Globe, LogOut 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import GlobalSearch from "../GlobalSearch"; // Adjust path as needed
+import { useRouter } from "next/navigation"; // Import useRouter
+import GlobalSearch from "../GlobalSearch"; 
 
 export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRouter(); // Initialize router
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -22,6 +24,20 @@ export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // --- NEW SIGN OUT LOGIC ---
+  const handleSignOut = async () => {
+    // 'local' scope prevents other devices (like your phone) from being logged out
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    
+    if (!error) {
+      setIsProfileOpen(false);
+      router.push('/auth');
+      router.refresh(); // Refresh to clear any cached user data in the layout
+    } else {
+      console.error("Logout Error:", error.message);
+    }
+  };
 
   return (
     <nav className="hidden md:block bg-black/40 backdrop-blur-xl text-white p-4 sticky top-0 z-50 border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
@@ -75,7 +91,9 @@ export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
                        <span className="text-[9px] font-black bg-[#3A6EA5]/20 text-[#3A6EA5] px-2 py-1 rounded-lg uppercase">{lang === 'en' ? 'FR' : 'EN'}</span>
                     </button>
                     <div className="h-[1px] my-2 mx-2 bg-white/5" />
-                    <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-3.5 hover:bg-red-500/10 rounded-2xl transition-all text-sm font-bold text-red-500">
+                    
+                    {/* UPDATED BUTTON */}
+                    <button onClick={handleSignOut} className="w-full flex items-center gap-3 p-3.5 hover:bg-red-500/10 rounded-2xl transition-all text-sm font-bold text-red-500">
                       <LogOut size={18} /> Sign Out
                     </button>
                   </motion.div>

@@ -1,19 +1,35 @@
 "use client";
 import { useState } from "react";
 import Link from 'next/link';
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; 
 import { supabase } from "@/lib/supabase";
 import { 
   Home, FileQuestion, Search, Clock, User, X, 
   LayoutDashboard, ShieldCheck, Globe, LogOut 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import GlobalSearch from "../GlobalSearch"; // Adjust path as needed
+import GlobalSearch from "../GlobalSearch";
 
 export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter(); 
+
+  // --- LOCAL SIGN OUT LOGIC ---
+  // This ensures that logging out on one device doesn't necessarily 
+  // kill the session on all your other devices.
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    
+    if (!error) {
+      setIsProfileOpen(false);
+      router.push('/auth');
+      router.refresh(); 
+    } else {
+      console.error("Logout Error:", error.message);
+    }
+  };
 
   return (
     <>
@@ -21,18 +37,27 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
       <AnimatePresence>
         {isMobileSearchOpen && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+            initial={{ opacity: 0, scale: 0.98 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.98 }}
             className="fixed inset-0 bg-[#050505] z-[100] flex flex-col md:hidden"
           >
             <div className="flex items-center gap-4 p-4 border-b border-white/5">
-              <button onClick={() => setIsMobileSearchOpen(false)} className="p-2 bg-white/5 rounded-xl"><X size={20}/></button>
-              <div className="flex-grow"><GlobalSearch /></div>
+              <button 
+                onClick={() => setIsMobileSearchOpen(false)} 
+                className="p-2 bg-white/5 rounded-xl text-white"
+              >
+                <X size={20}/>
+              </button>
+              <div className="flex-grow">
+                <GlobalSearch />
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* MOBILE FLOATING DOCK */}
+      {/* MOBILE FLOATING DOCK (The Bottom Bar) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
         <div className="mx-auto max-w-[95%] mb-6 pointer-events-auto">
           <div className="bg-[#0f0f0f]/80 backdrop-blur-3xl border border-white/10 p-2 rounded-[2rem] flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
@@ -47,6 +72,7 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
               <span className="text-[7px] font-bold uppercase tracking-tighter mt-1">Quiz</span>
             </Link>
 
+            {/* Main Search Button */}
             <button 
               onClick={() => setIsMobileSearchOpen(true)}
               className="w-14 h-14 bg-[#3A6EA5] rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-75 transition-transform"
@@ -70,40 +96,86 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
         </div>
       </div>
 
-      {/* MOBILE MENU SHEET */}
+      {/* MOBILE MENU SHEET (The Slide-up Menu) */}
       <AnimatePresence>
         {isProfileOpen && (
           <div className="md:hidden">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsProfileOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" />
+            {/* Backdrop */}
             <motion.div 
-              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setIsProfileOpen(false)} 
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" 
+            />
+
+            {/* Content Sheet */}
+            <motion.div 
+              initial={{ y: "100%" }} 
+              animate={{ y: 0 }} 
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed bottom-0 left-0 right-0 bg-[#0f0f0f] border-t border-white/10 z-[70] rounded-t-[2.5rem] p-6 pb-12 overflow-hidden"
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-6" />
               
+              {/* User Header */}
               <div className="bg-white/5 rounded-3xl p-4 flex items-center gap-4 mb-4 border border-white/5">
-                <div className="w-12 h-12 bg-[#3A6EA5] rounded-2xl flex items-center justify-center font-black text-xl">{user?.email ? user.email[0].toUpperCase() : 'U'}</div>
+                <div className="w-12 h-12 bg-[#3A6EA5] rounded-2xl flex items-center justify-center font-black text-xl text-white">
+                  {user?.email ? user.email[0].toUpperCase() : 'U'}
+                </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-black truncate">{user?.email}</span>
-                  <span className="text-[9px] uppercase tracking-widest text-[#3A6EA5] font-bold">{isAdmin ? 'Administrator' : 'Student Access'}</span>
+                  <span className="text-xs font-black truncate text-white">{user?.email}</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#3A6EA5] font-bold">
+                    {isAdmin ? 'Administrator' : 'Student Access'}
+                  </span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Link href="/dashboard" className="w-full flex items-center gap-4 p-4 bg-white/5 rounded-2xl font-bold transition-all active:scale-[0.98]">
-                  <LayoutDashboard size={20} className="text-[#3A6EA5]" /> <span className="text-sm">Student Dashboard</span>
+                {/* Navigation Links with Auto-Close */}
+                <Link 
+                  href="/dashboard" 
+                  onClick={() => setIsProfileOpen(false)}
+                  className="w-full flex items-center gap-4 p-4 bg-white/5 rounded-2xl font-bold transition-all active:scale-[0.98] text-white"
+                >
+                  <LayoutDashboard size={20} className="text-[#3A6EA5]" /> 
+                  <span className="text-sm">Student Dashboard</span>
                 </Link>
+
                 {isAdmin && (
-                  <Link href="/admin" className="w-full flex items-center gap-4 p-4 bg-amber-400/10 text-amber-400 rounded-2xl font-bold">
-                    <ShieldCheck size={20} /> <span className="text-sm">Admin Control</span>
+                  <Link 
+                    href="/admin" 
+                    onClick={() => setIsProfileOpen(false)}
+                    className="w-full flex items-center gap-4 p-4 bg-amber-400/10 text-amber-400 rounded-2xl font-bold transition-all active:scale-[0.98]"
+                  >
+                    <ShieldCheck size={20} /> 
+                    <span className="text-sm">Admin Control</span>
                   </Link>
                 )}
-                <button onClick={toggleLang} className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl font-bold">
-                  <div className="flex items-center gap-4"><Globe size={20} className="text-[#3A6EA5]" /> <span className="text-sm">Language</span></div>
-                  <span className="text-[10px] bg-[#3A6EA5] px-2 py-0.5 rounded-lg">{lang === 'en' ? 'FR' : 'EN'}</span>
+
+                <button 
+                  onClick={toggleLang} 
+                  className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl font-bold text-white transition-all active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-4">
+                    <Globe size={20} className="text-[#3A6EA5]" /> 
+                    <span className="text-sm">Language</span>
+                  </div>
+                  <span className="text-[10px] bg-[#3A6EA5] px-2 py-0.5 rounded-lg text-white">
+                    {lang === 'en' ? 'FR' : 'EN'}
+                  </span>
                 </button>
-                <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-4 p-4 bg-red-500/10 text-red-500 rounded-2xl font-bold mt-4">
-                  <LogOut size={20} /> <span className="text-sm">Sign Out</span>
+                
+                {/* Separator */}
+                <div className="h-[1px] w-full bg-white/5 my-2" />
+
+                <button 
+                  onClick={handleSignOut} 
+                  className="w-full flex items-center gap-4 p-4 bg-red-500/10 text-red-500 rounded-2xl font-bold transition-all active:scale-[0.98]"
+                >
+                  <LogOut size={20} /> 
+                  <span className="text-sm">Sign Out</span>
                 </button>
               </div>
             </motion.div>

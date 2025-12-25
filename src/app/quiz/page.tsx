@@ -44,6 +44,7 @@ export default function QuizArena() {
   const [view, setView] = useState<'lobby' | 'selection' | 'quiz' | 'results'>('lobby');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(true); // Added Security State
   const [isMasteryExam, setIsMasteryExam] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [shouldShake, setShouldShake] = useState(false);
@@ -61,7 +62,7 @@ export default function QuizArena() {
   // Selection State
   const [selectedSubject, setSelectedSubject] = useState<any>(null);
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
-  
+
   // Quiz State
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -75,10 +76,22 @@ export default function QuizArena() {
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
-  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hasSubmitted = useRef(false);
   const [isLaptop, setIsLaptop] = useState(false);
+
+  // 1. SECURITY GATE: Check if user is logged in
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace('/auth');
+      } else {
+        setCheckingAuth(false);
+      }
+    };
+    checkUser();
+  }, [router]);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -97,14 +110,15 @@ export default function QuizArena() {
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const themeColor = "rgba(59, 130, 246, 0.15)";
 
-  // Initial Data Load
+  // 2. DATA LOAD: Only runs if authenticated
   useEffect(() => {
+    if (checkingAuth) return;
+
     async function initArena() {
       setLoading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         
-        // Parallel requests for speed
         const [rankRes, subRes, profRes, perfRes] = await Promise.all([
           supabase.from('profiles').select('id, username, xp').order('xp', { ascending: false }).limit(5),
           supabase.from('subjects').select('*').is('parent_slug', null).order('title'),
@@ -115,26 +129,18 @@ export default function QuizArena() {
         if (rankRes.data) setGlobalRankings(rankRes.data);
         if (profRes?.data) setUserProfile(profRes.data);
 
-        // --- SAFETY NET: Filter Subjects that have Questions ---
-        // Fetch all question chapter_ids
         const { data: allQ } = await supabase.from('questions').select('chapter_id');
         const activeChapterIds = new Set(allQ?.map(q => q.chapter_id));
-
-        // Fetch chapters related to those IDs
         const { data: activeChapters } = await supabase.from('chapters').select('subject_key').in('id', Array.from(activeChapterIds));
         const activeModuleSlugs = new Set(activeChapters?.map(c => c.subject_key));
-
-        // Fetch modules (sub-subjects)
         const { data: activeModules } = await supabase.from('subjects').select('parent_slug').in('slug', Array.from(activeModuleSlugs));
         const activeSubjectSlugs = new Set(activeModules?.map(m => m.parent_slug));
 
-        // Only keep subjects that eventually lead to questions
         if (subRes.data) {
           const filtered = subRes.data.filter(s => activeSubjectSlugs.has(s.slug));
           setRootSubjects(filtered);
         }
 
-        // --- HEATMAP LOGIC ---
         if (perfRes?.data) {
            const heatMap: any = {};
            perfRes.data.forEach((p: any) => {
@@ -149,12 +155,13 @@ export default function QuizArena() {
              .slice(0, 3);
            setWeakSubjects(weak);
         }
-
-      } catch (err) { console.error("Load Error:", err); }
+      } catch (err) { 
+        console.error("Load Error:", err);
+      }
       setLoading(false);
     }
     initArena();
-  }, []);
+  }, [checkingAuth]);
 
   const rankInfo = useMemo(() => getRankDetails(userProfile?.xp || 0), [userProfile?.xp]);
 
@@ -167,6 +174,16 @@ export default function QuizArena() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [view, isAnswerChecked, showExitModal]);
 
+  // --- Loader if checking auth ---
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20">Securing Arena...</p>
+      </div>
+    );
+  }
+
   const fetchSubjectMasters = async (subjectId: string) => {
     const { data } = await supabase
       .from('quiz_performances')
@@ -174,7 +191,6 @@ export default function QuizArena() {
       .eq('subject_id', subjectId)
       .eq('is_mastery', true)
       .order('time_seconds', { ascending: true });
-
     if (data) {
       const uniqueMastersMap = new Map();
       data.forEach((entry: any) => {
@@ -212,8 +228,6 @@ export default function QuizArena() {
   const handleSubjectSelect = async (sub: any) => {
     setSelectedSubject(sub);
     setLoading(true);
-    
-    // Safety Net: Fetch only modules that have questions
     const { data: allQ } = await supabase.from('questions').select('chapter_id');
     const activeChapterIds = Array.from(new Set(allQ?.map(q => q.chapter_id)));
     const { data: activeChapters } = await supabase.from('chapters').select('subject_key').in('id', activeChapterIds);
@@ -230,7 +244,6 @@ export default function QuizArena() {
 
   const handleModuleSelect = async (mod: any) => {
     setLoading(true);
-    // Safety Net: Fetch only chapters that have questions
     const { data: qData } = await supabase.from('questions').select('chapter_id');
     const activeIds = Array.from(new Set(qData?.map(q => q.chapter_id)));
 
@@ -239,7 +252,6 @@ export default function QuizArena() {
       .eq('subject_key', mod.slug)
       .in('id', activeIds)
       .order('created_at');
-
     if (chapData) {
       setChapters(chapData);
       const counts: Record<string, number> = {};
@@ -278,7 +290,6 @@ export default function QuizArena() {
     const currentQ = questions[currentQIndex];
     const isCorrect = selectedOptions.length === currentQ.correct_indices.length && 
                       selectedOptions.every(i => currentQ.correct_indices.includes(i));
-    
     setSessionHistory(prev => [...prev, {
         question: currentQ.question_text,
         options: currentQ.options,
@@ -286,7 +297,6 @@ export default function QuizArena() {
         correct: currentQ.correct_indices,
         isCorrect
     }]);
-
     setIsAnswerChecked(true);
 
     if (isCorrect) {
@@ -304,14 +314,12 @@ export default function QuizArena() {
   const handleFinishQuiz = async () => {
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
-    
     if ((score / questions.length) > 0.7) {
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#3b82f6', '#10b981', '#ffffff'] });
     }
 
     const xp = score * (isMasteryExam ? 30 : 15);
     setXpEarned(xp);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -324,7 +332,6 @@ export default function QuizArena() {
           time_seconds: timeInSeconds,
           is_mastery: isMasteryExam
         }]);
-        // Update local profile for the animation
         setUserProfile((prev: any) => ({ ...prev, xp: (prev?.xp || 0) + xp }));
       }
     } catch (e) { console.error("Sync Error:", e); }
@@ -340,7 +347,8 @@ export default function QuizArena() {
       {/* Exit Modal */}
       <AnimatePresence>
         {showExitModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-[#0a0a0a] border border-white/10 p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl">
               <div className="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-5 text-red-500"><AlertTriangle size={28} /></div>
               <h3 className="text-xl font-black uppercase italic mb-2 tracking-tighter">Terminate?</h3>
@@ -401,7 +409,7 @@ export default function QuizArena() {
                   {/* --- SUBJECT HEATMAP (Weaknesses) --- */}
                   {weakSubjects.length > 0 && (
                     <div className="bg-red-500/5 border border-red-500/10 rounded-[2rem] p-6 backdrop-blur-3xl">
-                      <div className="text-red-500 font-black text-[10px] uppercase mb-4 flex items-center gap-2 tracking-widest"><TrendingDown size={14}/> Weak Points</div>
+                       <div className="text-red-500 font-black text-[10px] uppercase mb-4 flex items-center gap-2 tracking-widest"><TrendingDown size={14}/> Weak Points</div>
                       <div className="space-y-3">
                         {weakSubjects.map((s, i) => (
                           <div key={i} className="flex items-center justify-between">
@@ -436,7 +444,7 @@ export default function QuizArena() {
             <motion.div key="selection" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex-1 flex flex-col">
               <div className="flex items-center justify-between mb-8">
                 <button onClick={() => step === 1 ? setView('lobby') : setStep(step - 1)} className="flex items-center gap-2 text-[10px] font-black uppercase opacity-40 hover:opacity-100 transition-opacity">
-                  <ArrowLeft size={14}/> Back
+                   <ArrowLeft size={14}/> Back
                 </button>
               </div>
 
@@ -487,13 +495,13 @@ export default function QuizArena() {
                               </div>
                             </div>
                             <button onClick={() => startQuiz(true)} className="w-full md:w-auto px-6 py-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2">
-                              <Crown size={14}/> Mastery Exam
+                               <Crown size={14}/> Mastery Exam
                             </button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {modules.map(mod => (
                             <div key={mod.id} onClick={() => handleModuleSelect(mod)} className="p-5 md:p-6 rounded-[1.5rem] bg-white/[0.03] border border-white/10 hover:bg-white/[0.07] hover:border-white/20 cursor-pointer flex justify-between items-center group transition-all">
-                              <span className="text-sm md:text-base font-black uppercase italic flex items-center gap-3"><span className="opacity-70 text-lg">{mod.icon}</span> {mod.title}</span>
+                               <span className="text-sm md:text-base font-black uppercase italic flex items-center gap-3"><span className="opacity-70 text-lg">{mod.icon}</span> {mod.title}</span>
                               <ChevronRight size={18} className="opacity-20 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-blue-400" />
                             </div>
                           ))}
@@ -506,7 +514,7 @@ export default function QuizArena() {
                     <div className="space-y-6">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                         <div>
-                          <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Target <span className="text-purple-500">Chapters</span></h1>
+                           <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Target <span className="text-purple-500">Chapters</span></h1>
                           <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 mt-2">Select one or multiple</p>
                         </div>
                         <button onClick={() => startQuiz(false)} disabled={selectedChapters.length === 0} className="w-full md:w-auto px-10 py-4 bg-white text-black rounded-xl font-black uppercase text-[10px] tracking-widest disabled:opacity-20 disabled:scale-100 active:scale-95 transition-all shadow-xl hover:scale-105 hover:bg-purple-50">
@@ -566,14 +574,14 @@ export default function QuizArena() {
                       if (isAnswerChecked) {
                           if (isCorrect) style = "border-emerald-500 bg-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.2)]";
                           else if (isSelected) style = "border-red-500 bg-red-500/20 text-red-400 opacity-50";
-                          else style = "border-white/5 opacity-30"; 
+                          else style = "border-white/5 opacity-30";
                       }
                       return (
                         <button key={idx} onClick={() => !isAnswerChecked && setSelectedOptions(p => p.includes(idx) ? p.filter(i => i !== idx) : [...p, idx])} className={`group text-left p-5 md:p-6 rounded-2xl border-2 flex items-center gap-4 transition-all duration-200 active:scale-[0.98] ${style}`}>
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center font-black text-xs transition-all ${isSelected ? 'bg-white text-black border-white' : 'border-white/10 opacity-30 text-white'}`}>
+                            <div className={`flex-shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center font-black text-xs transition-all ${isSelected ? 'bg-white text-black border-white' : 'border-white/10 opacity-30 text-white'}`}>
                             {String.fromCharCode(65 + idx)}
                           </div>
-                          <span className="font-bold text-sm leading-snug">{opt}</span>
+                           <span className="font-bold text-sm leading-snug">{opt}</span>
                         </button>
                       );
                     })}
@@ -606,7 +614,6 @@ export default function QuizArena() {
                         <span className="text-xs font-black italic" style={{ color: rankInfo.current.color }}>{rankInfo.current.name}</span>
                       </div>
                       <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                        {/* The width animates from a "before XP" state to "after XP" state */}
                         <motion.div initial={{ width: `${((userProfile?.xp - xpEarned - rankInfo.current.minXp) / (rankInfo.next!.minXp - rankInfo.current.minXp)) * 100}%` }} animate={{ width: `${rankInfo.progress}%` }} className="h-full relative shadow-[0_0_20px_rgba(255,255,255,0.2)]" style={{ backgroundColor: rankInfo.current.color }} transition={{ duration: 2, delay: 0.5, ease: "circOut" }}>
                            <div className="absolute top-0 right-0 h-full w-2 bg-white/40 blur-sm" />
                         </motion.div>
@@ -647,7 +654,7 @@ export default function QuizArena() {
                                  )
                                ))}
                             </div>
-                          </div>
+                         </div>
                         </div>
                     </div>
                   ))}

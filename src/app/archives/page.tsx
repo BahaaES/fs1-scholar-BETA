@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   FileText, Search, Download, CheckCircle, 
   GraduationCap, X, Loader2, ExternalLink,
-  ArrowLeft, Eye // Added Eye for mobile view icon
+  ArrowLeft, Eye 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -13,11 +13,28 @@ export default function ArchivesPage() {
   const router = useRouter();
   const [exams, setExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(true); // Added for security check
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState("All");
   const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
 
+  // 1. SECURITY GATE: Check if user is logged in before doing anything
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace('/auth');
+      } else {
+        setCheckingAuth(false);
+      }
+    };
+    checkUser();
+  }, [router]);
+
+  // 2. DATA FETCHING: Only runs if security check passes
+  useEffect(() => {
+    if (checkingAuth) return;
+
     async function fetchExams() {
       const { data } = await supabase
         .from('past_exams')
@@ -27,7 +44,16 @@ export default function ArchivesPage() {
       setLoading(false);
     }
     fetchExams();
-  }, []);
+  }, [checkingAuth]);
+
+  // If we are still verifying the user's account, show a full-screen loader
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#3A6EA5]" size={32} />
+      </div>
+    );
+  }
 
   const getEmbedUrl = (url: string) => {
     if (!url) return "";
@@ -80,7 +106,7 @@ export default function ArchivesPage() {
             <input 
               type="text"
               placeholder="Search B1100, Bio, Math..."
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 md:py-4 pl-12 pr-4 text-sm focus:border-[#3A6EA5]/50 outline-none transition-all font-bold"
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 md:py-4 pl-12 pr-4 text-sm focus:border-[#3A6EA5]/50 outline-none transition-all font-bold text-white"
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
@@ -176,7 +202,6 @@ export default function ArchivesPage() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="relative w-full h-full max-w-5xl bg-[#0a0a0a] rounded-[1.5rem] md:rounded-[2.5rem] border border-white/10 overflow-hidden flex flex-col shadow-2xl"
             >
-              {/* MODAL HEADER */}
               <div className="p-3 md:p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
                 <div className="flex items-center gap-2 md:gap-3 ml-2 md:ml-4">
                   <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-[#3A6EA5]/20 flex items-center justify-center">
@@ -200,7 +225,6 @@ export default function ArchivesPage() {
                 </div>
               </div>
 
-              {/* IFRAME VIEWER */}
               <div className="flex-grow bg-white relative">
                 <iframe 
                   src={getEmbedUrl(selectedPdf)}
