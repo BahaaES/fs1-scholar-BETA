@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { 
   ArrowLeft, Trash2, Loader2, Search, Inbox, X, GraduationCap, 
-  Download, FileText
+  Download, FileText, Sparkles
 } from "lucide-react";
 import { LanguageContext } from '../layout';
 import { translations } from '../translations';
@@ -20,13 +20,11 @@ export default function SavedResourcesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPdf, setSelectedPdf] = useState<{url: string, title: string} | null>(null);
 
-  // --- 1. NAV VISIBILITY CONTROL ---
   useEffect(() => {
-    setNavVisible(false); // Hide nav/footer on enter
-    return () => setNavVisible(true); // Show nav/footer on exit
+    setNavVisible(false);
+    return () => setNavVisible(true);
   }, [setNavVisible]);
 
-  // --- 2. HELPERS ---
   const getDownloadUrl = (url: string) => {
     if (!url || !url.includes('drive.google.com')) return url;
     const parts = url.split('/d/');
@@ -42,14 +40,12 @@ export default function SavedResourcesPage() {
     return url.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
   };
 
-  // --- 3. DATA FETCHING (Optimized manual join) ---
   const fetchBookmarks = useCallback(async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push("/auth");
 
-      // Get initial bookmarks
       const { data: bData, error: bError } = await supabase
         .from("bookmarks")
         .select("*")
@@ -61,7 +57,6 @@ export default function SavedResourcesPage() {
       if (bData && bData.length > 0) {
         const chapterIds = bData.map(b => b.resource_id);
 
-        // Fetch chapters and their subject icons separately to avoid 400 error
         const { data: cData, error: cError } = await supabase
           .from("chapters")
           .select(`
@@ -97,7 +92,6 @@ export default function SavedResourcesPage() {
 
   useEffect(() => { fetchBookmarks(); }, [fetchBookmarks]);
 
-  // --- 4. ACTIONS ---
   const removeBookmark = async (id: string) => {
     const { error } = await supabase.from("bookmarks").delete().eq("id", id);
     if (!error) setBookmarks(prev => prev.filter(b => b.id !== id));
@@ -110,104 +104,112 @@ export default function SavedResourcesPage() {
   }, [bookmarks, searchQuery]);
 
   const handleOpenPdf = (url: string, title: string) => {
-    if(!url) return alert("Link not found");
+    if(!url) return;
     setSelectedPdf({ url, title });
-    // Keep nav hidden while PDF is open
     setNavVisible(false);
   };
 
   const handleClosePdf = () => {
     setSelectedPdf(null);
-    // Page is already in "hide nav" mode, cleanup handles the rest
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-      <Loader2 className="animate-spin text-[#3A6EA5]" size={40} />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#020202]">
+      <Loader2 className="animate-spin text-[#6366f1] mb-4" size={40} />
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Accessing Archive...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-[#3A6EA5]/30">
-      <div className="max-w-6xl mx-auto px-5 py-10">
+    <div className="min-h-screen bg-[#020202] text-white selection:bg-[#6366f1]/30 relative overflow-x-hidden">
+      
+      {/* Background Decorative Glow */}
+      <div className="absolute top-0 right-0 w-[50%] h-[40%] bg-[#6366f1]/5 blur-[120px] pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto px-6 py-12 relative z-10">
         
         {/* Header Section */}
-        <button 
+        <motion.button 
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 0.5, x: 0 }}
+          whileHover={{ opacity: 1, x: -5 }}
           onClick={() => router.push("/")} 
-          className="group inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em] mb-12 opacity-50 hover:opacity-100 transition-all"
+          className="group inline-flex items-center gap-3 font-black text-[11px] uppercase tracking-[0.3em] mb-12 transition-all"
         >
-          <ArrowLeft size={14} className="group-hover:-translate-x-1" /> {t.back}
-        </button>
+          <ArrowLeft size={16} className="text-[#6366f1]" /> {t.back}
+        </motion.button>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-20">
           <div>
-            <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter mb-2">
-              Saved <span className="opacity-30">Archive</span>
+            <div className="flex items-center gap-3 mb-4">
+               <Sparkles size={20} className="text-[#6366f1]" />
+               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">Your Collection</p>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-[0.8] mb-2">
+              Saved <span className="text-white/10 not-italic">Archive</span>
             </h1>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#3A6EA5]">
-              Quick access to your curated library
-            </p>
           </div>
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-20" size={18} />
+          
+          <div className="relative w-full md:w-96 group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-[#6366f1] transition-colors" size={20} />
             <input 
               type="text" 
-              placeholder="Search saved items..." 
+              placeholder="Filter your resources..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-[1.5rem] py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-[#3A6EA5] transition-all"
+              className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-5 pl-14 pr-6 text-sm focus:outline-none focus:border-[#6366f1]/50 focus:bg-white/[0.06] transition-all placeholder:text-white/20 font-bold"
             />
           </div>
         </div>
 
         {/* Grid Section */}
         {filteredBookmarks.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <AnimatePresence mode="popLayout">
               {filteredBookmarks.map((item) => (
                 <motion.div 
                   key={item.id} 
                   layout
-                  initial={{ opacity: 0, y: 20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
+                  initial={{ opacity: 0, scale: 0.9 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="group relative p-8 rounded-[2.5rem] border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all flex flex-col h-full"
+                  className="group relative p-8 rounded-[3rem] border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-[#6366f1]/20 transition-all flex flex-col h-full overflow-hidden shadow-xl"
                 >
-                  <div className="flex justify-between items-start mb-8">
-                    <div className="text-4xl bg-[#3A6EA5]/10 w-16 h-16 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="flex justify-between items-start mb-10">
+                    <div className="text-4xl bg-[#6366f1]/10 w-20 h-20 rounded-[1.8rem] flex items-center justify-center group-hover:scale-110 group-hover:bg-[#6366f1]/20 transition-all duration-500 shadow-lg shadow-[#6366f1]/5">
                       {item.subject_icon}
                     </div>
                     <button 
                       onClick={() => removeBookmark(item.id)} 
-                      className="p-3 rounded-xl bg-red-500/0 hover:bg-red-500/10 text-white/10 hover:text-red-500 transition-all"
+                      className="p-4 rounded-2xl bg-white/0 hover:bg-red-500/10 text-white/5 hover:text-red-500 transition-all"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={20} />
                     </button>
                   </div>
                   
                   <div className="flex-grow">
-                    <span className="text-[9px] font-black text-[#3A6EA5] uppercase tracking-[0.2em] block mb-2 opacity-60">
+                    <span className="text-[10px] font-black text-[#6366f1] uppercase tracking-[0.2em] block mb-3 opacity-60">
                       {item.subject_name}
                     </span>
-                    <h3 className="text-xl font-black uppercase italic leading-tight group-hover:text-[#3A6EA5] transition-colors">
+                    <h3 className="text-2xl font-black uppercase italic leading-tight group-hover:text-white transition-colors">
                       {item.resource_name}
                     </h3>
                   </div>
 
-                  <div className="mt-10 grid grid-cols-2 gap-3">
+                  <div className="mt-12 grid grid-cols-2 gap-4">
                     <button 
                       onClick={() => handleOpenPdf(item.file_url, item.resource_name)}
-                      className="py-4 rounded-2xl border border-white/10 text-[9px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
+                      className="py-5 rounded-[1.5rem] border border-white/5 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
                     >
-                      <FileText size={14} /> {t.preview}
+                      <FileText size={16} /> {t.preview}
                     </button>
                     <a 
                       href={getDownloadUrl(item.file_url)} 
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="py-4 rounded-2xl bg-[#3A6EA5] text-white text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                      className="py-5 rounded-[1.5rem] bg-[#6366f1] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#4f46e5] hover:shadow-lg hover:shadow-[#6366f1]/20 transition-all flex items-center justify-center gap-2"
                     >
-                      <Download size={14} /> {t.download}
+                      <Download size={16} /> {t.download}
                     </a>
                   </div>
                 </motion.div>
@@ -215,44 +217,52 @@ export default function SavedResourcesPage() {
             </AnimatePresence>
           </div>
         ) : (
-          <div className="py-40 flex flex-col items-center justify-center text-center">
-            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6 opacity-20">
-              <Inbox size={32} />
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }}
+            className="py-40 flex flex-col items-center justify-center text-center"
+          >
+            <div className="w-24 h-24 rounded-[2rem] bg-white/[0.02] border border-white/5 flex items-center justify-center mb-8">
+              <Inbox size={40} className="text-[#6366f1] opacity-20" />
             </div>
-            <p className="font-black uppercase tracking-[0.3em] opacity-20">Archive Empty</p>
-          </div>
+            <h2 className="font-black uppercase tracking-[0.4em] text-white/20 text-sm">Archive Empty</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/10 mt-2">Bookmark chapters to see them here</p>
+          </motion.div>
         )}
       </div>
 
       {/* PDF Modal Section */}
       <AnimatePresence>
         {selectedPdf && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-12">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={handleClosePdf} 
-              className="absolute inset-0 bg-black/95 backdrop-blur-md" 
+              className="absolute inset-0 bg-black/90 backdrop-blur-2xl" 
             />
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.9, opacity: 0 }} 
-              className="relative w-full h-full max-w-6xl bg-[#0a0a0a] md:rounded-[3rem] border border-white/10 overflow-hidden flex flex-col shadow-2xl"
+              initial={{ y: 50, opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              exit={{ y: 50, opacity: 0 }} 
+              className="relative w-full h-full max-w-6xl bg-[#0a0a0a] md:rounded-[3.5rem] border border-white/10 overflow-hidden flex flex-col shadow-[0_0_100px_rgba(99,102,241,0.1)]"
             >
-              <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                <div className="flex items-center gap-4 px-4">
-                  <div className="w-8 h-8 rounded-xl bg-[#3A6EA5]/20 flex items-center justify-center text-[#3A6EA5]">
-                    <GraduationCap size={18} />
+              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                <div className="flex items-center gap-5 px-4">
+                  <div className="w-10 h-10 rounded-2xl bg-[#6366f1]/20 flex items-center justify-center text-[#6366f1]">
+                    <GraduationCap size={20} />
                   </div>
-                  <span className="font-black uppercase text-[10px] tracking-[0.2em]">{selectedPdf.title}</span>
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em]">{selectedPdf.title}</span>
+                    <span className="text-[9px] font-bold text-[#6366f1] uppercase tracking-[0.1em]">Student Archive</span>
+                  </div>
                 </div>
                 <button 
                   onClick={handleClosePdf} 
-                  className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all"
+                  className="p-4 bg-white/5 hover:bg-red-500/10 hover:text-red-500 rounded-2xl transition-all"
                 >
-                  <X size={18} />
+                  <X size={24} />
                 </button>
               </div>
               <div className="flex-grow bg-white">

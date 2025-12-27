@@ -1,86 +1,137 @@
 @import "tailwindcss";
 
-/* 1. Root Variables - Optimized for True Dark & High Contrast */
+/* 1. Root Variables - Indigo & High-End Dark Mode */
 :root {
-  --background: #050505; /* Deep black for premium feel */
+  --background: #020202; /* Even deeper black for better OLED contrast */
   --foreground: #ffffff;
-  --primary: #3a6ea5;
-  --primary-glow: rgba(58, 110, 165, 0.3);
+  --primary: #6366f1;    /* New Indigo Brand Color */
+  --primary-glow: rgba(99, 102, 241, 0.12);
   --glass-bg: rgba(255, 255, 255, 0.03);
   --glass-border: rgba(255, 255, 255, 0.08);
   --card-hover: rgba(255, 255, 255, 0.06);
 }
 
-/* 2. Global Resets */
+/* 2. Global Resets & Body Styling */
 * {
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent; /* Fixes blue flash on mobile tap */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   min-height: 100vh;
-  /* Adds a subtle blue glow in the corners */
+  /* Ambient Indigo Background Glow */
   background-image: 
-    radial-gradient(at 0% 0%, var(--primary-glow) 0px, transparent 40%),
-    radial-gradient(at 100% 100%, var(--primary-glow) 0px, transparent 40%);
+    radial-gradient(at 0% 0%, var(--primary-glow) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.03) 0px, transparent 40%); /* Subtle emerald hint */
   background-attachment: fixed;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 3. Enhanced Glassmorphism for Mobile */
+/* 3. Advanced Glassmorphism */
 .glass-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Active state for phone tapping - makes buttons feel "physical" */
+/* Physical feedback for mobile/buttons */
 .glass-card:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
   background: var(--card-hover);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
-/* 4. Brand Gradient Text */
+/* 4. Indigo Brand Gradient */
 .brand-gradient {
-  background: linear-gradient(to right, #3A6EA5, #6a96c7);
-  -webkit-background-clip: text; /* For Safari/Chrome */
-  background-clip: text;         /* Standard property (The Fix) */
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  font-weight: 900;
 }
 
-/* 5. Mobile-Specific Tweaks */
+/* 5. Mobile & Performance Optimizations */
 @media (max-width: 768px) {
   .glass-card {
-    backdrop-filter: blur(10px); /* Lower blur on mobile for smoother performance */
+    backdrop-filter: blur(12px); /* Performance boost for mobile */
   }
   
-  /* Adds padding at the bottom of the screen for the iPhone Home Bar */
   main {
-    padding-bottom: env(safe-area-inset-bottom, 24px);
+    /* Respect iPhone Notch/Home Bar */
+    padding-bottom: env(safe-area-inset-bottom, 32px);
+    padding-top: env(safe-area-inset-top, 20px);
   }
 }
 
-/* 6. Custom Scrollbar for Chapters */
+/* 6. Premium Scrollbar (Indigo) */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
-  border-radius: 20px;
 }
 
-/* 7. Input Polishing */
-input, select {
+/* 7. Input Styling */
+input, select, textarea {
   outline: none !important;
+  appearance: none;
 }
 
 input::placeholder {
-  opacity: 0.4;
+  color: rgba(255, 255, 255, 0.2);
+  font-weight: 500;
+}
+
+/* 8. Utility: Pulse Effect for Support/Status icons */
+.glow-pulse {
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+/* Custom Cyber-Glass Scrollbar */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px; /* Very thin and modern */
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #020202; /* Matches your background */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.2); /* Faded Indigo */
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.05); /* Soft border */
+    transition: all 0.3s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.5); /* Brighter on hover */
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3); /* Neon glow */
+  }
+
+  /* Firefox Support */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.3) #020202;
+  }
 }

@@ -13,7 +13,6 @@ import { translations } from '../translations';
 import BookmarkButton from '@/app/components/BookmarkButton'; 
 
 // --- OPTIMIZATION: Memoized Chapter Item ---
-// This prevents the whole list from re-rendering when progress is toggled
 const ChapterItem = memo(({ chap, isDone, userId, onPreview, onToggle, getDownloadUrl }: any) => (
   <div className={`p-4 rounded-3xl border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 group transition-all hover:bg-white/[0.02] ${isDone ? 'border-emerald-500/20' : ''}`}>
     <div className="flex items-center gap-4 flex-grow">
@@ -22,7 +21,7 @@ const ChapterItem = memo(({ chap, isDone, userId, onPreview, onToggle, getDownlo
       </button>
       <div>
         <h3 className={`font-black text-lg ${isDone ? 'opacity-30 line-through' : ''}`}>{chap.title}</h3>
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-20 italic">Academic Resource</p>
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-20 italic">Curriculum Resource</p>
       </div>
     </div>
     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -38,13 +37,13 @@ const ChapterItem = memo(({ chap, isDone, userId, onPreview, onToggle, getDownlo
         onClick={() => onPreview({url: chap.file_url, title: chap.title})}
         className="flex-1 md:flex-none px-6 py-3 rounded-2xl bg-white/5 text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2"
       >
-        <GraduationCap size={16} /> Preview
+        <GraduationCap size={16} /> Open Reader
       </button>
       <a 
         href={getDownloadUrl(chap.file_url)} 
         target="_blank"
         rel="noopener noreferrer"
-        className="flex-1 md:flex-none px-6 py-3 rounded-2xl bg-[#3A6EA5] text-[10px] font-black uppercase tracking-widest hover:bg-[#2d5682] transition-all flex items-center justify-center gap-2"
+        className="flex-1 md:flex-none px-6 py-3 rounded-2xl bg-[#6366f1] text-[10px] font-black uppercase tracking-widest hover:bg-[#4f46e5] transition-all flex items-center justify-center gap-2"
       >
         <Download size={16} /> Download
       </a>
@@ -62,19 +61,17 @@ export default function SubjectPage() {
     parent: null, subs: [], chapters: []
   });
   const [loading, setLoading] = useState(true);
-  const [completedChapters, setCompletedChapters] = useState<Set<string>>(new Set()); // Use Set for O(1) lookup
+  const [completedChapters, setCompletedChapters] = useState<Set<string>>(new Set()); 
   const [userId, setUserId] = useState<string | null>(null);
   const [selectedPdf, setSelectedPdf] = useState<{url: string, title: string} | null>(null);
   const [openSections, setOpenSections] = useState<string[]>([]);
 
-  // --- OPTIMIZATION: Parallel Fetching ---
   useEffect(() => {
     async function fetchData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         setUserId(user?.id || null);
 
-        // Run queries in parallel
         const [parentRes, subsRes] = await Promise.all([
           supabase.from('subjects').select('*').eq('slug', slug).single(),
           supabase.from('subjects').select('*').eq('parent_slug', slug).order('title', { ascending: true })
@@ -82,7 +79,6 @@ export default function SubjectPage() {
 
         const subSlugs = subsRes.data?.map(s => s.slug) || [];
         
-        // Fetch chapters and user progress in parallel
         const [chapsRes, progressRes] = await Promise.all([
           supabase.from('chapters').select('*').in('subject_key', subSlugs).order('title', { ascending: true }),
           user ? supabase.from('user_progress').select('chapter_id').eq('user_id', user.id) : Promise.resolve({ data: [] })
@@ -108,7 +104,6 @@ export default function SubjectPage() {
     fetchData();
   }, [slug]);
 
-  // --- OPTIMIZATION: Memoized Helpers ---
   const getDownloadUrl = useCallback((url: string) => {
     if (!url || !url.includes('drive.google.com')) return url;
     const fileId = url.split('/d/')[1]?.split('/')[0];
@@ -124,7 +119,6 @@ export default function SubjectPage() {
     if (!userId) return alert("Please login");
     const isDone = completedChapters.has(chapterId);
     
-    // Optimistic UI Update
     setCompletedChapters(prev => {
       const next = new Set(prev);
       isDone ? next.delete(chapterId) : next.add(chapterId);
@@ -153,7 +147,7 @@ export default function SubjectPage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-      <Loader2 className="animate-spin text-[#3A6EA5]" size={40} />
+      <Loader2 className="animate-spin text-[#6366f1]" size={40} />
     </div>
   );
 
@@ -167,13 +161,13 @@ export default function SubjectPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-10">
           <div>
             <div className="flex items-center gap-2 text-amber-500 font-black text-[10px] uppercase tracking-widest mb-4">
-              <Beaker size={14} /> LU {data.parent?.slug?.toUpperCase()} UNIT
+              <Beaker size={14} /> LU {data.parent?.slug?.toUpperCase()} DIVISION
             </div>
             <div className="flex items-center gap-6">
                <span className="text-6xl md:text-8xl">{data.parent?.icon}</span>
                <div>
                   <h1 className="text-4xl md:text-7xl font-black tracking-tighter uppercase italic leading-none">{data.parent?.title}</h1>
-                  <p className="text-[#3A6EA5] font-black tracking-[0.2em] uppercase text-[10px] mt-4 opacity-60 italic">Faculty of Science • L1</p>
+                  <p className="text-[#6366f1] font-black tracking-[0.2em] uppercase text-[10px] mt-4 opacity-60 italic">Academic Portal • Faculty of Science</p>
                </div>
             </div>
           </div>
@@ -183,15 +177,15 @@ export default function SubjectPage() {
               <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
                 <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="5" fill="transparent" className="text-white/5" />
                 <motion.circle 
-                  cx="32" cy="32" r="28" stroke="#3A6EA5" strokeWidth="5" fill="transparent" 
+                  cx="32" cy="32" r="28" stroke="#6366f1" strokeWidth="5" fill="transparent" 
                   strokeDasharray={175.9} 
                   animate={{ strokeDashoffset: 175.9 - (progressStats.percent / 100) * 175.9 }}
                 />
               </svg>
-              <span className="absolute text-[10px] font-black text-[#3A6EA5]">{progressStats.percent}%</span>
+              <span className="absolute text-[10px] font-black text-[#6366f1]">{progressStats.percent}%</span>
             </div>
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-[#3A6EA5]">Progress</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[#6366f1]">Completion</p>
               <p className="text-2xl font-black">{progressStats.done}<span className="opacity-20 mx-1">/</span>{progressStats.total}</p>
             </div>
           </div>
@@ -207,13 +201,13 @@ export default function SubjectPage() {
             <section key={sub.id} className="border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.01]">
               <button 
                 onClick={() => setOpenSections(prev => prev.includes(sub.id) ? prev.filter(i => i !== sub.id) : [...prev, sub.id])}
-                className={`w-full sticky top-0 z-20 flex items-center justify-between p-6 md:p-8 transition-all backdrop-blur-xl ${isOpen ? 'bg-[#3A6EA5]/10 border-b border-[#3A6EA5]/20' : 'hover:bg-white/[0.03]'}`}
+                className={`w-full sticky top-0 z-20 flex items-center justify-between p-6 md:p-8 transition-all backdrop-blur-xl ${isOpen ? 'bg-[#6366f1]/10 border-b border-[#6366f1]/20' : 'hover:bg-white/[0.03]'}`}
               >
                 <div className="flex items-center gap-4">
                   <span className="text-2xl">{sub.icon}</span>
                   <h2 className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">{sub.title}</h2>
                 </div>
-                <ChevronDown className={`transition-transform duration-500 ${isOpen ? 'rotate-180 text-[#3A6EA5]' : 'opacity-20'}`} />
+                <ChevronDown className={`transition-transform duration-500 ${isOpen ? 'rotate-180 text-[#6366f1]' : 'opacity-20'}`} />
               </button>
 
               <AnimatePresence>
@@ -235,7 +229,7 @@ export default function SubjectPage() {
                       ) : (
                         <div className="py-20 flex flex-col items-center opacity-30">
                           <Clock size={24} className="mb-4" />
-                          <h4 className="font-black uppercase text-xs">Under Maintenance</h4>
+                          <h4 className="font-black uppercase text-xs">Resources Pending</h4>
                         </div>
                       )}
                     </div>
@@ -247,7 +241,7 @@ export default function SubjectPage() {
         })}
       </div>
 
-      {/* Reader Modal stays same logic but uses getEmbedUrl helper */}
+      {/* Reader Modal */}
       <AnimatePresence>
         {selectedPdf && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8">

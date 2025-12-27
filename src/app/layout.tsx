@@ -9,6 +9,7 @@ import { ShieldCheck, Globe, Instagram, Send, Loader2, GraduationCap } from "luc
 
 import DesktopNav from "./components/layout/DesktopNav";
 import MobileNav from "./components/layout/MobileNav";
+import { translations } from "./translations"; // Ensure this path is correct
 
 export const LanguageContext = createContext({ 
   lang: 'en' as 'en' | 'fr', 
@@ -22,8 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [isAdmin, setIsAdmin] = useState(false);
   const [lang, setLang] = useState<'en' | 'fr'>('en');
   const [isNavVisible, setNavVisible] = useState(true); 
-  const [isLoading, setIsLoading] = useState(true); // Control the global loader
+  const [isLoading, setIsLoading] = useState(true); 
   const pathname = usePathname();
+
+  // Get current translation helper
+  const t = translations[lang];
 
   const isAuthPage = pathname === '/auth';
   const isFocusPage = pathname === '/focus';
@@ -65,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           await checkAdminStatus(session.user);
         }
       } finally {
-        setIsLoading(false); // Finished checking session
+        setIsLoading(false); 
       }
     };
 
@@ -89,7 +93,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang={lang} className="dark">
-      <body className="min-h-screen flex flex-col bg-[#050505] text-white selection:bg-[#3A6EA5]/30 relative overflow-x-hidden font-sans antialiased">
+      <body className="min-h-screen flex flex-col bg-[#020202] text-white selection:bg-[#6366f1]/30 relative overflow-x-hidden font-sans antialiased">
         
         {/* GLOBAL LOADING SCREEN */}
         <AnimatePresence>
@@ -97,25 +101,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <motion.div 
               initial={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-[#050505] z-[9999] flex flex-col items-center justify-center"
+              className="fixed inset-0 bg-[#020202] z-[9999] flex flex-col items-center justify-center"
             >
               <motion.div 
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ repeat: Infinity, duration: 2 }}
-                className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(58,110,165,0.3)]"
+                className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(99,102,241,0.2)]"
               >
-                <GraduationCap className="text-[#3A6EA5]" size={40} />
+                <GraduationCap className="text-[#6366f1]" size={40} />
               </motion.div>
-              <Loader2 className="animate-spin text-[#3A6EA5] opacity-50" size={24} />
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-8 text-white/20">Initializing Hub</p>
+              <Loader2 className="animate-spin text-[#6366f1] opacity-50" size={24} />
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-8 text-white/20">
+                {lang === 'en' ? "University Portal" : "Portail Universitaire"}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
-
-        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-[#3A6EA5]/10 blur-[120px] rounded-full transform-gpu" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-900/10 blur-[120px] rounded-full transform-gpu" />
-        </div>
 
         <LanguageContext.Provider value={{ lang, setLang, isNavVisible, setNavVisible }}>
           {showGlobalNav && (
@@ -141,17 +142,105 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </AnimatePresence>
           
           {showGlobalNav && (
-            <footer className="relative z-20 mt-auto pt-16 pb-40 md:pb-16 border-t border-white/5 bg-[#050505]/80 backdrop-blur-xl">
+            <footer className="relative z-20 mt-auto pt-20 pb-40 md:pb-16 border-t border-white/5 bg-[#020202]/80 backdrop-blur-xl">
               <div className="max-w-7xl mx-auto px-6">
-                {/* ... footer content ... */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+                  
+                  {/* Column 1: Brand & Purpose */}
+                  <div className="md:col-span-1 space-y-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[#6366f1]/20">
+                        <GraduationCap className="text-[#6366f1]" size={20} />
+                      </div>
+                      <span className="font-black tracking-tighter text-xl italic uppercase">
+                        {lang === 'en' ? "Student Portal" : "Portail Étudiant"}
+                      </span>
+                    </div>
+                    <p className="text-white/40 text-xs font-medium leading-relaxed italic">
+                      {t.heroSub}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#6366f1] transition-all"><Instagram size={16} /></a>
+                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#0088cc] transition-all"><Send size={16} /></a>
+                    </div>
+                  </div>
+
+                  {/* Column 2: Academic Resources */}
+                  <div className="space-y-6">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">
+                      {lang === 'en' ? "Curriculum" : "Programme"}
+                    </h4>
+                    <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
+                      <li>
+                        <Link href="/quiz" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
+                          <span className="group-hover:text-[#6366f1] transition-colors">{t.quizHub}</span>
+                          <span className="text-[8px] opacity-50 lowercase font-medium tracking-normal">
+                            {lang === 'en' ? "Practice examinations" : "Examens d'entraînement"}
+                          </span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/focus" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
+                          <span className="group-hover:text-amber-500 transition-colors">{t.focusMode}</span>
+                          <span className="text-[8px] opacity-50 lowercase font-medium tracking-normal">
+                            {lang === 'en' ? "Dedicated study timer" : "Chronomètre d'étude dédié"}
+                          </span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/saved" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
+                          <span className="group-hover:text-white transition-colors">{t.library}</span>
+                          <span className="text-[8px] opacity-50 lowercase font-medium tracking-normal">
+                            {t.librarySub}
+                          </span>
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Column 3: Site Map */}
+                  <div className="space-y-6">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">Navigation</h4>
+                    <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
+                      <li><Link href="/" className="hover:opacity-100 hover:text-white transition-all">{lang === 'en' ? "Home" : "Accueil"}</Link></li>
+                      <li><Link href="/about" className="hover:opacity-100 hover:text-white transition-all">{lang === 'en' ? "Information" : "Informations"}</Link></li>
+                    </ul>
+                  </div>
+
+                  {/* Column 4: Support */}
+                  <div className="space-y-6">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">Assistance</h4>
+                    <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
+                      <li>
+                        <Link href="/support" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
+                          <span className="group-hover:text-emerald-500 transition-colors">
+                            {lang === 'en' ? "Student Support" : "Aide Étudiante"}
+                          </span>
+                          <span className="text-[8px] opacity-50 lowercase font-medium tracking-normal">
+                            {lang === 'en' ? "Technical inquiries" : "Demandes techniques"}
+                          </span>
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
+
+                </div>
+
+                {/* Bottom Bar */}
                 <div className="pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
                   <div className="flex flex-col items-center md:items-start gap-2">
                     <div className="flex items-center gap-3 text-emerald-500/50 text-[9px] font-black uppercase tracking-widest">
-                      <ShieldCheck size={14} /> Systems Operational
+                      <ShieldCheck size={14} /> {lang === 'en' ? "Systems Secure" : "Systèmes Sécurisés"}
                     </div>
-                    <p className="text-[9px] font-medium opacity-20 tracking-widest">
-                      © 2025 LEBANESE UNIVERSITY • ALL RIGHTS RESERVED
+                    <p className="text-[9px] font-medium opacity-20 tracking-widest uppercase italic text-center md:text-left">
+                      © 2025 Lebanese University • {lang === 'en' ? "Academic Resource Project" : "Projet de Ressources Académiques"}
                     </p>
+                  </div>
+
+                  <div className="flex items-center gap-6 text-[9px] font-black uppercase tracking-[0.3em] opacity-30">
+                    <div className="flex items-center gap-2 text-[#6366f1]">
+                      <Globe size={12} /> <span>LB-BEIRUT</span>
+                    </div>
                   </div>
                 </div>
               </div>
