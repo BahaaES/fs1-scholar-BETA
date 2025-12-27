@@ -9,7 +9,11 @@ import { ShieldCheck, Globe, Instagram, Send, Loader2, GraduationCap } from "luc
 
 import DesktopNav from "./components/layout/DesktopNav";
 import MobileNav from "./components/layout/MobileNav";
-import { translations } from "./translations"; // Ensure this path is correct
+import { translations } from "./translations"; 
+
+// NOTE: In Next.js, metadata usually goes in a server component. 
+// Since this is "use client", we will handle the title/icon via useEffect 
+// to avoid the hydration error you just saw.
 
 export const LanguageContext = createContext({ 
   lang: 'en' as 'en' | 'fr', 
@@ -26,7 +30,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState(true); 
   const pathname = usePathname();
 
-  // Get current translation helper
   const t = translations[lang];
 
   const isAuthPage = pathname === '/auth';
@@ -38,14 +41,42 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isAdminPage = pathname.startsWith('/admin');
 
   const showGlobalNav = 
-    !isAuthPage && 
-    !isFocusPage && 
-    !isSavedPage && 
-    !isSupportPage && 
-    !isQuizPage && 
-    !isDashboard && 
-    !isAdminPage && 
-    isNavVisible;
+    !isAuthPage && !isFocusPage && !isSavedPage && 
+    !isSupportPage && !isQuizPage && !isDashboard && 
+    !isAdminPage && isNavVisible;
+
+  // --- FIX FOR THE ERROR: SET TITLE & ICON MANUALLY ---
+  // --- DYNAMIC TITLE & ICON LOGIC ---
+  useEffect(() => {
+    // 1. Define the Page Name based on the URL path
+    let pageName = "Home";
+    
+    if (pathname === '/') pageName = lang === 'en' ? "Home" : "Accueil";
+    else if (pathname.includes('/quiz')) pageName = lang === 'en' ? "Quiz Hub" : "Centre de Quiz";
+    else if (pathname === '/saved') pageName = lang === 'en' ? "Library" : "Bibliothèque";
+    else if (pathname === '/focus') pageName = lang === 'en' ? "Focus Mode" : "Mode Focus";
+    else if (pathname === '/support') pageName = lang === 'en' ? "Support" : "Assistance";
+    else if (pathname.startsWith('/admin')) pageName = "Admin Terminal";
+    else if (pathname.startsWith('/dashboard')) pageName = "Dashboard";
+    else {
+      // For dynamic routes (like /quiz/cardiology), capitalize the last part of the URL
+      const pathSegments = pathname.split('/').filter(Boolean);
+      const lastSegment = pathSegments[pathSegments.length - 1];
+      pageName = lastSegment ? lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1) : "Portal";
+    }
+
+    // 2. Set the actual Browser Tab Title
+    document.title = `Student Portal | ${pageName}`;
+
+    // 3. Ensure the Hat Icon is set (Fixes hydration error)
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement || document.createElement('link');
+    link.type = 'image/x-icon';
+    link.rel = 'icon';
+    link.href = '/hat-icon.png?v=1';
+    if (!document.querySelector("link[rel~='icon']")) {
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+  }, [pathname, lang]); // This runs every time the URL or Language changes
 
   const checkAdminStatus = useCallback(async (currentUser: any) => {
     if (!currentUser) { setIsAdmin(false); return; }
@@ -72,7 +103,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         setIsLoading(false); 
       }
     };
-
     initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -93,9 +123,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang={lang} className="dark">
-      <body className="min-h-screen flex flex-col bg-[#020202] text-white selection:bg-[#6366f1]/30 relative overflow-x-hidden font-sans antialiased">
+      {/* NO HEAD TAG HERE TO AVOID HYDRATION ERRORS */}
+      <body className="min-h-screen flex flex-col bg-[#020202] text-white selection:bg-[#8B5CF6]/30 relative overflow-x-hidden font-sans antialiased">
         
-        {/* GLOBAL LOADING SCREEN */}
         <AnimatePresence>
           {isLoading && (
             <motion.div 
@@ -106,11 +136,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <motion.div 
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ repeat: Infinity, duration: 2 }}
-                className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(99,102,241,0.2)]"
+                className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(139,92,246,0.3)]"
               >
-                <GraduationCap className="text-[#6366f1]" size={40} />
+                <GraduationCap className="text-[#8B5CF6]" size={40} />
               </motion.div>
-              <Loader2 className="animate-spin text-[#6366f1] opacity-50" size={24} />
+              <Loader2 className="animate-spin text-[#8B5CF6] opacity-50" size={24} />
               <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-8 text-white/20">
                 {lang === 'en' ? "University Portal" : "Portail Universitaire"}
               </p>
@@ -146,11 +176,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="max-w-7xl mx-auto px-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
                   
-                  {/* Column 1: Brand & Purpose */}
                   <div className="md:col-span-1 space-y-6">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[#6366f1]/20">
-                        <GraduationCap className="text-[#6366f1]" size={20} />
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[#8B5CF6]/20">
+                        <GraduationCap className="text-[#8B5CF6]" size={20} />
                       </div>
                       <span className="font-black tracking-tighter text-xl italic uppercase">
                         {lang === 'en' ? "Student Portal" : "Portail Étudiant"}
@@ -160,20 +189,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       {t.heroSub}
                     </p>
                     <div className="flex items-center gap-4">
-                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#6366f1] transition-all"><Instagram size={16} /></a>
-                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#0088cc] transition-all"><Send size={16} /></a>
+                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#8B5CF6] transition-all"><Instagram size={16} /></a>
+                      <a href="#" className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#8B5CF6] transition-all"><Send size={16} /></a>
                     </div>
                   </div>
 
-                  {/* Column 2: Academic Resources */}
                   <div className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8B5CF6]">
                       {lang === 'en' ? "Curriculum" : "Programme"}
                     </h4>
                     <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
                       <li>
                         <Link href="/quiz" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
-                          <span className="group-hover:text-[#6366f1] transition-colors">{t.quizHub}</span>
+                          <span className="group-hover:text-[#8B5CF6] transition-colors">{t.quizHub}</span>
                           <span className="text-[8px] opacity-50 lowercase font-medium tracking-normal">
                             {lang === 'en' ? "Practice examinations" : "Examens d'entraînement"}
                           </span>
@@ -198,18 +226,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </ul>
                   </div>
 
-                  {/* Column 3: Site Map */}
                   <div className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">Navigation</h4>
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8B5CF6]">Navigation</h4>
                     <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
                       <li><Link href="/" className="hover:opacity-100 hover:text-white transition-all">{lang === 'en' ? "Home" : "Accueil"}</Link></li>
                       <li><Link href="/about" className="hover:opacity-100 hover:text-white transition-all">{lang === 'en' ? "Information" : "Informations"}</Link></li>
                     </ul>
                   </div>
 
-                  {/* Column 4: Support */}
                   <div className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6366f1]">Assistance</h4>
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8B5CF6]">Assistance</h4>
                     <ul className="space-y-4 text-xs font-bold uppercase tracking-widest opacity-40">
                       <li>
                         <Link href="/support" className="hover:opacity-100 hover:text-white transition-all flex flex-col gap-1 group">
@@ -223,10 +249,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       </li>
                     </ul>
                   </div>
-
                 </div>
 
-                {/* Bottom Bar */}
                 <div className="pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
                   <div className="flex flex-col items-center md:items-start gap-2">
                     <div className="flex items-center gap-3 text-emerald-500/50 text-[9px] font-black uppercase tracking-widest">
@@ -238,7 +262,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
 
                   <div className="flex items-center gap-6 text-[9px] font-black uppercase tracking-[0.3em] opacity-30">
-                    <div className="flex items-center gap-2 text-[#6366f1]">
+                    <div className="flex items-center gap-2 text-[#8B5CF6]">
                       <Globe size={12} /> <span>LB-BEIRUT</span>
                     </div>
                   </div>
