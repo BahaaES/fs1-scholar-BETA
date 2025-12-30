@@ -13,7 +13,6 @@ import { translations } from "./translations";
 import { useRouter } from "next/navigation";
 
 export default function HomePage() {
-  // Added semester to the context destructuring
   const { lang, semester } = useContext(LanguageContext);
   const t = translations[lang as 'en' | 'fr'] || translations['en'];
   const router = useRouter();
@@ -28,64 +27,86 @@ export default function HomePage() {
   const primaryIndigo = "#6366f1";
 
   const fetchAllData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/auth');
-        return;
-      }
+  if (!isSilent) setLoading(true);
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/auth');
+      return;
+    }
 
-      // Added .eq('semester', semester) to the subjects query
-      const [profile, saved, sessions, progress, chapters, subData] = await Promise.all([
-        supabase.from('profiles').select('username').eq('id', user.id).single(),
-        supabase.from('bookmarks').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('study_sessions').select('duration_seconds').eq('user_id', user.id),
-        supabase.from('user_progress').select('chapter_id').eq('user_id', user.id),
-        supabase.from('chapters').select('*', { count: 'exact', head: true }),
-        supabase.from('subjects')
-          .select('*')
-          .is('parent_slug', null)
-          .eq('semester', semester) // Filter by selected semester
-          .order('slug', { ascending: true })
-      ]);
+    // 1. Optimized Fetch: Only get what we need
+    // Note: removed 'title_fr' if you haven't run the SQL yet, 
+    // but if you ran the SQL above, you can keep it.
+    const [profileRes, savedRes, sessionsRes, progressRes, allSemesterSubjectsRes] = await Promise.all([
+      supabase.from('profiles').select('username').eq('id', user.id).single(),
+      supabase.from('bookmarks').select('id, resource_name, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(2),
+      supabase.from('study_sessions').select('duration_seconds').eq('user_id', user.id),
+      supabase.from('user_progress').select('chapter_id').eq('user_id', user.id),
+      supabase.from('subjects')
+        .select('id, slug, title, icon, parent_slug') // Removed title_fr here to stop the error immediately
+        .eq('semester', parseInt(semester.toString())) 
+    ]);
 
-      if (profile.data) setUserName(profile.data.username || user.email?.split('@')[0] || "Scholar");
-      if (saved.data) setBookmarks(saved.data);
-      if (subData.data) setSubjects(subData.data);
+    if (profileRes.data) setUserName(profileRes.data.username || user.email?.split('@')[0] || "Scholar");
+    if (savedRes.data) setBookmarks(savedRes.data);
 
-      if (sessions.data) {
-        const totalSeconds = sessions.data.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
-        setTotalFocusTime({ hours: Math.floor(totalSeconds / 3600), minutes: Math.floor((totalSeconds % 3600) / 60) });
-      }
+    if (sessionsRes.data) {
+      const totalSeconds = sessionsRes.data.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+      setTotalFocusTime({ hours: Math.floor(totalSeconds / 3600), minutes: Math.floor((totalSeconds % 3600) / 60) });
+    }
 
-      const totalCount = chapters.count || 0;
-      const completedCount = progress.data?.length || 0;
+    const allSubjects = allSemesterSubjectsRes.data || [];
+    const rootSubjects = allSubjects.filter(s => !s.parent_slug).sort((a, b) => a.slug.localeCompare(b.slug));
+    setSubjects(rootSubjects);
+
+    // --- Progress Calculation for Selected Semester ---
+    const semesterSlugs = allSubjects.map(s => s.slug);
+
+    if (semesterSlugs.length > 0) {
+      const { data: semesterChapters } = await supabase
+        .from('chapters')
+        .select('id')
+        .in('subject_key', semesterSlugs);
+
+      const semesterChapterIds = semesterChapters?.map(c => c.id) || [];
+      const totalCount = semesterChapterIds.length;
+
+      const userProgressIds = new Set(progressRes.data?.map(p => p.chapter_id) || []);
+      const completedCount = semesterChapterIds.filter(id => userProgressIds.has(id)).length;
+
       setOverallStats({ 
         totalItems: totalCount, 
         totalDone: completedCount, 
         percent: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0 
       });
-
-    } catch (error) {
-      console.error("Optimized Fetch Error:", error);
-    } finally {
-      setLoading(false);
     }
-  }, [router, semester]); // Added semester as a dependency
 
+  } catch (error) {
+    console.error("Fetch Error:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [router, semester]);
   const removeBookmark = async (id: string) => {
-    const { error } = await supabase.from('bookmarks').delete().eq('id', id);
-    if (!error) {
-      setBookmarks(prev => prev.filter(b => b.id !== id));
-    }
+    // Optimistic update for UI speed
+    setBookmarks(prev => prev.filter(b => b.id !== id));
+    await supabase.from('bookmarks').delete().eq('id', id);
   };
 
   useEffect(() => {
     fetchAllData();
-    const handleFocus = () => fetchAllData(true);
+    // Debounce focus refresh to prevent lag on rapid tab switching
+    let timeoutId: NodeJS.Timeout;
+    const handleFocus = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fetchAllData(true), 1000);
+    };
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearTimeout(timeoutId);
+    };
   }, [fetchAllData]);
 
   if (loading) return (
@@ -120,6 +141,7 @@ export default function HomePage() {
             </p>
           </div>
 
+          {/* PROGRESS CIRCLE (Now Specific to Semester) */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/[0.03] backdrop-blur-2xl p-8 rounded-[3rem] w-full lg:w-[400px] border border-white/10 shadow-2xl relative overflow-hidden group">
             <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
             <div className="relative z-10">
@@ -130,13 +152,14 @@ export default function HomePage() {
                       <motion.circle 
                         initial={{ strokeDashoffset: 276.5 }} 
                         animate={{ strokeDashoffset: 276.5 - (276.5 * overallStats.percent) / 100 }} 
+                        transition={{ duration: 1.5, ease: "easeOut" }}
                         cx="50" cy="50" r="44" stroke={primaryIndigo} strokeWidth="10" fill="transparent" strokeDasharray="276.5" strokeLinecap="round" 
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center font-black text-xl text-indigo-400">{overallStats.percent}%</div>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest flex items-center gap-2"><Target size={12}/> Syllabus Status</p>
+                    <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest flex items-center gap-2"><Target size={12}/> Semester {semester}</p>
                     <p className="text-sm font-bold opacity-60 mt-1">{overallStats.totalDone} / {overallStats.totalItems} Completed</p>
                   </div>
                 </div>
@@ -194,7 +217,7 @@ export default function HomePage() {
                   {bookmarks.length > 2 && (
                     <Link href="/saved">
                       <button className="text-indigo-400 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors px-2">
-                        View All ({bookmarks.length})
+                        View All
                       </button>
                     </Link>
                   )}
@@ -220,7 +243,7 @@ export default function HomePage() {
 
         {/* SUBJECT GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-32">
-          {subjects.map((subject, index) => (
+          {subjects.map((subject) => (
             <Link href={`/${subject.slug}`} key={subject.id}>
               <motion.div 
                 whileHover={{ y: -8 }} 
