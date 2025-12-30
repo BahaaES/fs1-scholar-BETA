@@ -13,7 +13,8 @@ import { translations } from "./translations";
 import { useRouter } from "next/navigation";
 
 export default function HomePage() {
-  const { lang } = useContext(LanguageContext);
+  // Added semester to the context destructuring
+  const { lang, semester } = useContext(LanguageContext);
   const t = translations[lang as 'en' | 'fr'] || translations['en'];
   const router = useRouter();
   
@@ -35,13 +36,18 @@ export default function HomePage() {
         return;
       }
 
+      // Added .eq('semester', semester) to the subjects query
       const [profile, saved, sessions, progress, chapters, subData] = await Promise.all([
         supabase.from('profiles').select('username').eq('id', user.id).single(),
         supabase.from('bookmarks').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('study_sessions').select('duration_seconds').eq('user_id', user.id),
         supabase.from('user_progress').select('chapter_id').eq('user_id', user.id),
         supabase.from('chapters').select('*', { count: 'exact', head: true }),
-        supabase.from('subjects').select('*').is('parent_slug', null).order('slug', { ascending: true })
+        supabase.from('subjects')
+          .select('*')
+          .is('parent_slug', null)
+          .eq('semester', semester) // Filter by selected semester
+          .order('slug', { ascending: true })
       ]);
 
       if (profile.data) setUserName(profile.data.username || user.email?.split('@')[0] || "Scholar");
@@ -66,7 +72,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, semester]); // Added semester as a dependency
 
   const removeBookmark = async (id: string) => {
     const { error } = await supabase.from('bookmarks').delete().eq('id', id);

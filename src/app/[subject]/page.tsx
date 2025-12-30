@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useContext, useMemo, useCallback, memo } from 'react';
 import { 
   ArrowLeft, Download, Loader2, CheckCircle2, 
-  Beaker, X, GraduationCap, ChevronDown, AlertTriangle, Clock
+  Beaker, X, GraduationCap, ChevronDown, AlertTriangle, Clock, Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,6 +54,8 @@ ChapterItem.displayName = "ChapterItem";
 
 export default function SubjectPage() {
   const { subject: slug } = useParams();
+  // REMOVED: We don't need 'semester' from context here anymore.
+  // The page should show content based on the URL, not the nav toggle.
   const { lang, setNavVisible } = useContext(LanguageContext);
   const t = translations[lang as 'en' | 'fr'];
 
@@ -68,25 +70,45 @@ export default function SubjectPage() {
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         setUserId(user?.id || null);
 
-        const [parentRes, subsRes] = await Promise.all([
-          supabase.from('subjects').select('*').eq('slug', slug).single(),
-          supabase.from('subjects').select('*').eq('parent_slug', slug).order('title', { ascending: true })
-        ]);
-
-        const subSlugs = subsRes.data?.map(s => s.slug) || [];
+        // 1. Fetch Parent Subject
+        const { data: parent } = await supabase.from('subjects').select('*').eq('slug', slug).single();
         
+        if (!parent) {
+          setLoading(false);
+          return;
+        }
+
+        // 2. Fetch Sub-Subjects
+        // REMOVED: .eq('semester', semester)
+        // REASON: If I visit a subject page, I want to see its sub-modules regardless of my global toggle.
+        const { data: subs } = await supabase
+          .from('subjects')
+          .select('*')
+          .eq('parent_slug', slug)
+          .order('title', { ascending: true });
+
+        const subSlugs = subs?.map(s => s.slug) || [];
+        
+        // 3. Fetch Chapters
+        // REMOVED: filtering chapters by global semester. 
+        // We rely on the relationship: if a chapter belongs to this subject, show it.
         const [chapsRes, progressRes] = await Promise.all([
-          supabase.from('chapters').select('*').in('subject_key', subSlugs).order('title', { ascending: true }),
+          supabase.from('chapters')
+            .select('*')
+            .in('subject_key', subSlugs)
+            .order('title', { ascending: true }),
+          
           user ? supabase.from('user_progress').select('chapter_id').eq('user_id', user.id) : Promise.resolve({ data: [] })
         ]);
 
         setData({
-          parent: parentRes.data,
-          subs: subsRes.data || [],
+          parent: parent,
+          subs: subs || [],
           chapters: chapsRes.data || []
         });
 
@@ -94,7 +116,8 @@ export default function SubjectPage() {
           setCompletedChapters(new Set(progressRes.data.map((p: any) => p.chapter_id)));
         }
         
-        if (subsRes.data?.length) setOpenSections([subsRes.data[0].id]);
+        if (subs?.length) setOpenSections([subs[0].id]);
+
       } catch (err) {
         console.error("Fetch Error:", err);
       } finally {
@@ -102,7 +125,7 @@ export default function SubjectPage() {
       }
     }
     fetchData();
-  }, [slug]);
+  }, [slug]); // REMOVED semester dependency - this page is now static to the URL slug
 
   const getDownloadUrl = useCallback((url: string) => {
     if (!url || !url.includes('drive.google.com')) return url;
@@ -167,7 +190,16 @@ export default function SubjectPage() {
                <span className="text-6xl md:text-8xl">{data.parent?.icon}</span>
                <div>
                   <h1 className="text-4xl md:text-7xl font-black tracking-tighter uppercase italic leading-none">{data.parent?.title}</h1>
-                  <p className="text-[#6366f1] font-black tracking-[0.2em] uppercase text-[10px] mt-4 opacity-60 italic">Academic Portal • Faculty of Science</p>
+                  <div className="flex items-center gap-3 mt-4">
+                     {/* UPDATED BADGE: 
+                        Shows the semester of the SUBJECT being viewed, not the user's global toggle.
+                        Falls back to 'General' if semester is null/0.
+                     */}
+                     <span className="px-3 py-1 rounded-full bg-[#6366f1]/10 text-[#6366f1] border border-[#6366f1]/20 text-[9px] font-black uppercase tracking-widest">
+                       {data.parent?.semester ? `Semester ${data.parent.semester}` : 'General Core'}
+                     </span>
+                     <p className="text-white/40 font-black tracking-[0.2em] uppercase text-[10px] opacity-60 italic">Academic Portal</p>
+                  </div>
                </div>
             </div>
           </div>
@@ -193,52 +225,60 @@ export default function SubjectPage() {
       </header>
 
       <div className="space-y-6">
-        {data.subs.map((sub: any) => {
-          const isOpen = openSections.includes(sub.id);
-          const subChapters = data.chapters.filter((c: any) => c.subject_key === sub.slug);
+        {data.subs.length === 0 ? (
+           <div className="p-20 text-center border border-white/5 rounded-[2.5rem] bg-white/[0.01]">
+              <Layers size={40} className="text-[#6366f1] mx-auto mb-4 opacity-20" />
+              <h3 className="font-black uppercase text-white/20 tracking-widest text-sm">No Modules Found</h3>
+              <p className="text-[10px] uppercase font-bold text-white/10 mt-2">There are no sub-modules configured for this subject.</p>
+           </div>
+        ) : (
+          data.subs.map((sub: any) => {
+            const isOpen = openSections.includes(sub.id);
+            const subChapters = data.chapters.filter((c: any) => c.subject_key === sub.slug);
 
-          return (
-            <section key={sub.id} className="border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.01]">
-              <button 
-                onClick={() => setOpenSections(prev => prev.includes(sub.id) ? prev.filter(i => i !== sub.id) : [...prev, sub.id])}
-                className={`w-full sticky top-0 z-20 flex items-center justify-between p-6 md:p-8 transition-all backdrop-blur-xl ${isOpen ? 'bg-[#6366f1]/10 border-b border-[#6366f1]/20' : 'hover:bg-white/[0.03]'}`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-2xl">{sub.icon}</span>
-                  <h2 className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">{sub.title}</h2>
-                </div>
-                <ChevronDown className={`transition-transform duration-500 ${isOpen ? 'rotate-180 text-[#6366f1]' : 'opacity-20'}`} />
-              </button>
+            return (
+              <section key={sub.id} className="border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.01]">
+                <button 
+                  onClick={() => setOpenSections(prev => prev.includes(sub.id) ? prev.filter(i => i !== sub.id) : [...prev, sub.id])}
+                  className={`w-full sticky top-0 z-20 flex items-center justify-between p-6 md:p-8 transition-all backdrop-blur-xl ${isOpen ? 'bg-[#6366f1]/10 border-b border-[#6366f1]/20' : 'hover:bg-white/[0.03]'}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-2xl">{sub.icon}</span>
+                    <h2 className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">{sub.title}</h2>
+                  </div>
+                  <ChevronDown className={`transition-transform duration-500 ${isOpen ? 'rotate-180 text-[#6366f1]' : 'opacity-20'}`} />
+                </button>
 
-              <AnimatePresence>
-                {isOpen && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                    <div className="p-4 md:p-8 space-y-4">
-                      {subChapters.length > 0 ? (
-                        subChapters.map((chap: any) => (
-                          <ChapterItem 
-                            key={chap.id}
-                            chap={chap}
-                            isDone={completedChapters.has(chap.id)}
-                            userId={userId}
-                            onPreview={handleOpenPdf}
-                            onToggle={toggleProgress}
-                            getDownloadUrl={getDownloadUrl}
-                          />
-                        ))
-                      ) : (
-                        <div className="py-20 flex flex-col items-center opacity-30">
-                          <Clock size={24} className="mb-4" />
-                          <h4 className="font-black uppercase text-xs">Resources Pending</h4>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </section>
-          );
-        })}
+                <AnimatePresence>
+                  {isOpen && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                      <div className="p-4 md:p-8 space-y-4">
+                        {subChapters.length > 0 ? (
+                          subChapters.map((chap: any) => (
+                            <ChapterItem 
+                              key={chap.id}
+                              chap={chap}
+                              isDone={completedChapters.has(chap.id)}
+                              userId={userId}
+                              onPreview={handleOpenPdf}
+                              onToggle={toggleProgress}
+                              getDownloadUrl={getDownloadUrl}
+                            />
+                          ))
+                        ) : (
+                          <div className="py-20 flex flex-col items-center opacity-30">
+                            <Clock size={24} className="mb-4" />
+                            <h4 className="font-black uppercase text-xs">Resources Pending</h4>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </section>
+            );
+          })
+        )}
       </div>
 
       {/* Reader Modal */}

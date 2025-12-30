@@ -11,13 +11,12 @@ import DesktopNav from "./components/layout/DesktopNav";
 import MobileNav from "./components/layout/MobileNav";
 import { translations } from "./translations"; 
 
-// NOTE: In Next.js, metadata usually goes in a server component. 
-// Since this is "use client", we will handle the title/icon via useEffect 
-// to avoid the hydration error you just saw.
-
+// Updated Context to include Semester
 export const LanguageContext = createContext({ 
   lang: 'en' as 'en' | 'fr', 
   setLang: (l: 'en' | 'fr') => {},
+  semester: 1 as 1 | 2,
+  setSemester: (s: 1 | 2) => {},
   isNavVisible: true,
   setNavVisible: (v: boolean) => {} 
 });
@@ -26,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [lang, setLang] = useState<'en' | 'fr'>('en');
+  const [semester, setSemester] = useState<1 | 2>(1); // New Semester State
   const [isNavVisible, setNavVisible] = useState(true); 
   const [isLoading, setIsLoading] = useState(true); 
   const pathname = usePathname();
@@ -45,10 +45,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     !isSupportPage && !isQuizPage && !isDashboard && 
     !isAdminPage && isNavVisible;
 
-  // --- FIX FOR THE ERROR: SET TITLE & ICON MANUALLY ---
   // --- DYNAMIC TITLE & ICON LOGIC ---
   useEffect(() => {
-    // 1. Define the Page Name based on the URL path
     let pageName = "Home";
     
     if (pathname === '/') pageName = lang === 'en' ? "Home" : "Accueil";
@@ -59,16 +57,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     else if (pathname.startsWith('/admin')) pageName = "Admin Terminal";
     else if (pathname.startsWith('/dashboard')) pageName = "Dashboard";
     else {
-      // For dynamic routes (like /quiz/cardiology), capitalize the last part of the URL
       const pathSegments = pathname.split('/').filter(Boolean);
       const lastSegment = pathSegments[pathSegments.length - 1];
       pageName = lastSegment ? lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1) : "Portal";
     }
 
-    // 2. Set the actual Browser Tab Title
     document.title = `Student Portal | ${pageName}`;
 
-    // 3. Ensure the Hat Icon is set (Fixes hydration error)
     const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement || document.createElement('link');
     link.type = 'image/x-icon';
     link.rel = 'icon';
@@ -76,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (!document.querySelector("link[rel~='icon']")) {
       document.getElementsByTagName('head')[0].appendChild(link);
     }
-  }, [pathname, lang]); // This runs every time the URL or Language changes
+  }, [pathname, lang]);
 
   const checkAdminStatus = useCallback(async (currentUser: any) => {
     if (!currentUser) { setIsAdmin(false); return; }
@@ -89,17 +84,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
+    // Load saved preferences
     const savedLang = localStorage.getItem("hub_lang") as 'en' | 'fr';
     if (savedLang) setLang(savedLang);
+    
+    const savedSemester = localStorage.getItem("hub_semester");
+    if (savedSemester) setSemester(Number(savedSemester) as 1 | 2);
 
     const initAuth = async () => {
+      const safetyTimer = setTimeout(() => setIsLoading(false), 5000);
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(session.user);
           await checkAdminStatus(session.user);
         }
+      } catch (err) {
+        console.error("Auth initialization error", err);
       } finally {
+        clearTimeout(safetyTimer);
         setIsLoading(false); 
       }
     };
@@ -121,10 +125,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     localStorage.setItem("hub_lang", newLang);
   };
 
+  const handleSemesterChange = (s: 1 | 2) => {
+    setSemester(s);
+    localStorage.setItem("hub_semester", s.toString());
+  };
+
+  // Logic to toggle between 1 and 2
+  const toggleSemester = () => {
+    const nextSemester = semester === 1 ? 2 : 1;
+    handleSemesterChange(nextSemester);
+  };
+
   return (
     <html lang={lang} className="dark">
-      {/* NO HEAD TAG HERE TO AVOID HYDRATION ERRORS */}
-      <body className="min-h-screen flex flex-col bg-[#020202] text-white selection:bg-[#8B5CF6]/30 relative overflow-x-hidden font-sans antialiased">
+      <body 
+        suppressHydrationWarning={true} 
+        className="min-h-screen flex flex-col bg-[#020202] text-white selection:bg-[#8B5CF6]/30 relative overflow-x-hidden font-sans antialiased"
+      >
         
         <AnimatePresence>
           {isLoading && (
@@ -148,11 +165,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           )}
         </AnimatePresence>
 
-        <LanguageContext.Provider value={{ lang, setLang, isNavVisible, setNavVisible }}>
+        <LanguageContext.Provider value={{ 
+          lang, 
+          setLang, 
+          semester, 
+          setSemester: handleSemesterChange, 
+          isNavVisible, 
+          setNavVisible 
+        }}>
           {showGlobalNav && (
             <>
-              <DesktopNav user={user} isAdmin={isAdmin} lang={lang} toggleLang={handleLanguageToggle} />
-              <MobileNav user={user} isAdmin={isAdmin} lang={lang} toggleLang={handleLanguageToggle} />
+              <DesktopNav 
+                user={user} 
+                isAdmin={isAdmin} 
+                lang={lang} 
+                toggleLang={handleLanguageToggle}
+                semester={semester}
+                toggleSemester={toggleSemester}
+              />
+              <MobileNav 
+                user={user} 
+                isAdmin={isAdmin} 
+                lang={lang} 
+                toggleLang={handleLanguageToggle}
+                semester={semester}
+                toggleSemester={toggleSemester}
+              />
             </>
           )}
 

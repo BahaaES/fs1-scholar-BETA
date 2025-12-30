@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { supabase } from "@/lib/supabase";
 import { 
   GraduationCap, Clock, ChevronDown, LayoutDashboard, 
-  ShieldCheck, Globe, LogOut, FileQuestion
+  ShieldCheck, Globe, LogOut, FileQuestion, Layers
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation"; 
 import GlobalSearch from "../GlobalSearch"; 
 
-export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
+// Added semester and toggleSemester to props
+export default function DesktopNav({ user, isAdmin, lang, toggleLang, semester, toggleSemester }: any) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -56,7 +57,6 @@ export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
         <div className="flex items-center gap-4">
           <GlobalSearch />
           
-          {/* Focus Mode is now the main utility on desktop per instructions */}
           <Link href="/focus" className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group">
             <Clock size={18} className="text-[#6366f1] group-hover:rotate-12 transition-transform" />
             <span className="text-xs font-bold uppercase tracking-wider">Focus Mode</span>
@@ -78,7 +78,6 @@ export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
                        <LayoutDashboard size={18} className="text-[#6366f1] group-hover:scale-110 transition-transform" /> Dashboard
                     </Link>
                     
-                    {/* Quiz/Assessment link moved inside the profile menu for a cleaner Laptop desktop nav */}
                     <Link href="/quiz" className="w-full flex items-center gap-3 p-3.5 hover:bg-white/5 rounded-2xl transition-all text-sm font-bold group">
                        <FileQuestion size={18} className="text-[#6366f1] group-hover:scale-110 transition-transform" /> Assessments
                     </Link>
@@ -88,10 +87,21 @@ export default function DesktopNav({ user, isAdmin, lang, toggleLang }: any) {
                          <ShieldCheck size={18} /> Admin Panel
                       </Link>
                     )}
+
+                    <div className="h-[1px] my-1 mx-2 bg-white/5" />
+
+                    {/* SEMESTER SWITCHER */}
+                    <button onClick={toggleSemester} className="w-full flex items-center justify-between p-3.5 hover:bg-white/5 rounded-2xl transition-all">
+                       <div className="flex items-center gap-3"><Layers size={18} className="text-[#6366f1]" /><span className="text-sm font-bold">Semester {semester}</span></div>
+                       <span className="text-[9px] font-black bg-[#6366f1]/20 text-[#6366f1] px-2 py-1 rounded-lg uppercase">S{semester === 1 ? '2' : '1'}</span>
+                    </button>
+
+                    {/* LANGUAGE SWITCHER */}
                     <button onClick={toggleLang} className="w-full flex items-center justify-between p-3.5 hover:bg-white/5 rounded-2xl transition-all">
                        <div className="flex items-center gap-3"><Globe size={18} className="text-[#6366f1]" /><span className="text-sm font-bold">{lang === 'en' ? 'English' : 'Français'}</span></div>
                        <span className="text-[9px] font-black bg-[#6366f1]/20 text-[#6366f1] px-2 py-1 rounded-lg uppercase">{lang === 'en' ? 'FR' : 'EN'}</span>
                     </button>
+
                     <div className="h-[1px] my-2 mx-2 bg-white/5" />
                     
                     <button onClick={handleSignOut} className="w-full flex items-center gap-3 p-3.5 hover:bg-red-500/10 rounded-2xl transition-all text-sm font-bold text-red-500">

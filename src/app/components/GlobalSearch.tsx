@@ -1,15 +1,20 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { Search, FileText, BookOpen, X, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef, useContext } from "react";
+import { Search, FileText, X, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { LanguageContext } from "./../layout"; // Ensure this path is correct
 
 export default function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ subjects: any[]; chapters: any[] }>({ subjects: [], chapters: [] });
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Access the current semester from Context
+  const { semester } = useContext(LanguageContext);
+  
   const router = useRouter();
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -21,16 +26,18 @@ export default function GlobalSearch() {
       }
       setLoading(true);
 
-      // Search Subjects (Modules/Codes)
+      // Search Subjects filtered by Semester
       const { data: subData } = await supabase
         .from("subjects")
         .select("*")
+        .eq("semester", semester) // Filter by active semester
         .ilike("title", `%${query}%`);
 
-      // Search Chapters (PDFs/Lessons)
+      // Search Chapters filtered by Semester (joining via subjects table)
       const { data: chapData } = await supabase
         .from("chapters")
-        .select("*, subjects!inner(parent_slug)")
+        .select("*, subjects!inner(parent_slug, semester)")
+        .eq("subjects.semester", semester) // Only show chapters for current semester
         .ilike("title", `%${query}%`)
         .limit(5);
 
@@ -40,9 +47,8 @@ export default function GlobalSearch() {
 
     const timer = setTimeout(searchData, 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, semester]); // Re-run search if semester changes
 
-  // Close search on click outside (Fixed Typo & Added Touch support for phones)
   useEffect(() => {
     const handler = (e: MouseEvent | TouchEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -88,29 +94,28 @@ export default function GlobalSearch() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            /* Mobile: Fixed position, full width | Desktop: Absolute dropdown */
-            className="fixed inset-x-4 md:absolute md:inset-x-auto md:right-0 top-[70px] md:top-full mt-2 w-auto md:w-[400px] lg:w-[450px] glass-card shadow-2xl rounded-[1.5rem] md:rounded-[2rem] border border-white/10 overflow-hidden z-[100] p-1.5 md:p-2"
+            className="fixed inset-x-4 md:absolute md:inset-x-auto md:right-0 top-[70px] md:top-full mt-2 w-auto md:w-[400px] lg:w-[450px] shadow-2xl rounded-[1.5rem] md:rounded-[2rem] border border-white/10 overflow-hidden z-[100] p-1.5 md:p-2"
             style={{ backgroundColor: 'rgba(10, 10, 10, 0.98)', backdropFilter: 'blur(20px)', color: 'white' }}
           >
             {loading ? (
-              <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-[#3A6EA5]" /></div>
+              <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-[#6366f1]" /></div>
             ) : (
               <div className="max-h-[60vh] md:max-h-[400px] overflow-y-auto custom-scrollbar">
-                {/* SUBJECTS RESULTS */}
+                
                 {results.subjects.length > 0 && (
                   <div className="p-1 md:p-2">
-                    <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest opacity-40 px-3 mb-2">Modules & Codes</p>
+                    <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest opacity-40 px-3 mb-2">Semester {semester} Modules</p>
                     {results.subjects.map(sub => (
                       <button 
                         key={sub.id}
                         onClick={() => handleNavigate(`/${sub.parent_slug || sub.slug}`)}
-                        className="w-full flex items-center gap-3 p-2.5 md:p-3 hover:bg-[#3A6EA5]/10 rounded-xl md:rounded-2xl transition-all text-left group"
+                        className="w-full flex items-center gap-3 p-2.5 md:p-3 hover:bg-white/5 rounded-xl md:rounded-2xl transition-all text-left group"
                       >
-                        <div className="w-9 h-9 md:w-10 md:h-10 bg-[#3A6EA5]/10 rounded-lg md:rounded-xl flex items-center justify-center text-lg md:text-xl shrink-0">
+                        <div className="w-9 h-9 md:w-10 md:h-10 bg-[#6366f1]/10 rounded-lg md:rounded-xl flex items-center justify-center text-lg md:text-xl shrink-0">
                           {sub.icon}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-bold text-xs md:text-sm group-hover:text-[#3A6EA5] truncate">{sub.title}</p>
+                          <p className="font-bold text-xs md:text-sm group-hover:text-[#6366f1] truncate">{sub.title}</p>
                           <p className="text-[9px] md:text-[10px] opacity-50 uppercase tracking-tighter truncate">{sub.slug}</p>
                         </div>
                       </button>
@@ -118,7 +123,6 @@ export default function GlobalSearch() {
                   </div>
                 )}
 
-                {/* CHAPTERS RESULTS */}
                 {results.chapters.length > 0 && (
                   <div className="p-1 md:p-2 border-t border-white/5">
                     <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest opacity-40 px-3 my-2">Lessons & Documents</p>
@@ -126,13 +130,13 @@ export default function GlobalSearch() {
                       <button 
                         key={chap.id}
                         onClick={() => handleNavigate(`/${chap.subjects.parent_slug}`)}
-                        className="w-full flex items-center gap-3 p-2.5 md:p-3 hover:bg-[#3A6EA5]/10 rounded-xl md:rounded-2xl transition-all text-left group"
+                        className="w-full flex items-center gap-3 p-2.5 md:p-3 hover:bg-white/5 rounded-xl md:rounded-2xl transition-all text-left group"
                       >
                         <div className="w-9 h-9 md:w-10 md:h-10 bg-amber-500/10 rounded-lg md:rounded-xl flex items-center justify-center text-amber-500 shrink-0">
                           <FileText size={16} className="md:w-[18px]" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-bold text-xs md:text-sm group-hover:text-[#3A6EA5] truncate">{chap.title}</p>
+                          <p className="font-bold text-xs md:text-sm group-hover:text-[#6366f1] truncate">{chap.title}</p>
                           <p className="text-[9px] md:text-[10px] opacity-50 uppercase tracking-tighter truncate">In {chap.subject_key}</p>
                         </div>
                       </button>
@@ -142,7 +146,7 @@ export default function GlobalSearch() {
 
                 {results.subjects.length === 0 && results.chapters.length === 0 && (
                   <div className="p-12 text-center opacity-40 text-[10px] font-black uppercase tracking-widest italic">
-                    No resources found
+                    No resources found for Semester {semester}
                   </div>
                 )}
               </div>

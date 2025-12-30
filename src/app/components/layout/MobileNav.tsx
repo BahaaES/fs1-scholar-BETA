@@ -5,12 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { 
   Home, FileQuestion, Search, Clock, User, X, 
-  LayoutDashboard, ShieldCheck, Globe, LogOut 
+  LayoutDashboard, ShieldCheck, Globe, LogOut, Layers 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import GlobalSearch from "../GlobalSearch";
 
-export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
+// Added semester and toggleSemester to props for consistency with RootLayout
+export default function MobileNav({ user, isAdmin, lang, toggleLang, semester, toggleSemester }: any) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const pathname = usePathname();
@@ -31,16 +32,13 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
       <AnimatePresence>
         {isMobileSearchOpen && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }} 
-            animate={{ opacity: 1, scale: 1 }} 
-            exit={{ opacity: 0, scale: 0.98 }}
+            initial={{ opacity: 0, y: 10 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: 10 }}
             className="fixed inset-0 bg-[#050505] z-[100] flex flex-col md:hidden"
           >
             <div className="flex items-center gap-4 p-4 border-b border-white/5">
-              <button 
-                onClick={() => setIsMobileSearchOpen(false)} 
-                className="p-2 bg-white/5 rounded-xl text-white"
-              >
+              <button onClick={() => setIsMobileSearchOpen(false)} className="p-2 bg-white/5 rounded-xl text-white">
                 <X size={20}/>
               </button>
               <div className="flex-grow">
@@ -56,32 +54,31 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
         <div className="mx-auto max-w-[95%] mb-6 pointer-events-auto">
           <div className="bg-[#0f0f0f]/80 backdrop-blur-3xl border border-white/10 p-2 rounded-[2rem] flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             
-            <Link href="/" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname === '/' ? 'text-[#6366f1]' : 'text-white/20'}`}>
+            <Link href="/" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname === '/' ? 'text-[#8B5CF6]' : 'text-white/20'}`}>
               <Home size={20} strokeWidth={pathname === '/' ? 2.5 : 2} />
               <span className="text-[7px] font-bold uppercase tracking-tighter mt-1">Home</span>
             </Link>
 
-            {/* In mobile view, we keep the Quiz icon for quick access */}
-            <Link href="/quiz" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname.includes('/quiz') ? 'text-[#6366f1]' : 'text-white/20'}`}>
+            <Link href="/quiz" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname.includes('/quiz') ? 'text-[#8B5CF6]' : 'text-white/20'}`}>
               <FileQuestion size={20} />
               <span className="text-[7px] font-bold uppercase tracking-tighter mt-1">Assessment</span>
             </Link>
 
             <button 
               onClick={() => setIsMobileSearchOpen(true)}
-              className="w-14 h-14 bg-[#6366f1] rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-75 transition-transform"
+              className="w-14 h-14 bg-[#8B5CF6] rounded-2xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] active:scale-75 transition-transform"
             >
               <Search size={24} strokeWidth={3} />
             </button>
 
-            <Link href="/focus" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname === '/focus' ? 'text-[#6366f1]' : 'text-white/20'}`}>
+            <Link href="/focus" className={`flex-1 flex flex-col items-center py-2 transition-all ${pathname === '/focus' ? 'text-[#8B5CF6]' : 'text-white/20'}`}>
               <Clock size={20} />
               <span className="text-[7px] font-bold uppercase tracking-tighter mt-1">Focus</span>
             </Link>
 
             <button 
               onClick={() => setIsProfileOpen(true)} 
-              className={`flex-1 flex flex-col items-center py-2 transition-all ${isProfileOpen ? 'text-[#6366f1]' : 'text-white/20'}`}
+              className={`flex-1 flex flex-col items-center py-2 transition-all ${isProfileOpen ? 'text-[#8B5CF6]' : 'text-white/20'}`}
             >
               <User size={20} />
               <span className="text-[7px] font-bold uppercase tracking-tighter mt-1">Menu</span>
@@ -103,18 +100,32 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-6" />
               
               <div className="bg-white/5 rounded-3xl p-4 flex items-center gap-4 mb-4 border border-white/5">
-                <div className="w-12 h-12 bg-[#6366f1] rounded-2xl flex items-center justify-center font-black text-xl text-white">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#8B5CF6] to-purple-600 rounded-2xl flex items-center justify-center font-black text-xl text-white">
                   {user?.email ? user.email[0].toUpperCase() : 'U'}
                 </div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-xs font-black truncate text-white">{user?.email}</span>
-                  <span className="text-[9px] uppercase tracking-widest text-[#6366f1] font-bold">University Access</span>
+                  <span className="text-[9px] uppercase tracking-widest text-[#8B5CF6] font-bold">Student Account</span>
                 </div>
               </div>
 
               <div className="space-y-2">
+                {/* SEMESTER SWITCHER - Integrated with props */}
+                <button 
+                  onClick={toggleSemester} 
+                  className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl font-bold text-white transition-all border border-white/5"
+                >
+                  <div className="flex items-center gap-4">
+                    <Layers size={20} className="text-[#8B5CF6]" /> 
+                    <span className="text-sm">Current Semester</span>
+                  </div>
+                  <span className="text-[10px] bg-white/10 px-3 py-1 rounded-lg text-white font-black">
+                    S{semester}
+                  </span>
+                </button>
+
                 <Link href="/dashboard" onClick={() => setIsProfileOpen(false)} className="w-full flex items-center gap-4 p-4 bg-white/5 rounded-2xl font-bold transition-all text-white">
-                  <LayoutDashboard size={20} className="text-[#6366f1]" /> 
+                  <LayoutDashboard size={20} className="text-[#8B5CF6]" /> 
                   <span className="text-sm">Academic Dashboard</span>
                 </Link>
 
@@ -127,10 +138,10 @@ export default function MobileNav({ user, isAdmin, lang, toggleLang }: any) {
 
                 <button onClick={toggleLang} className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl font-bold text-white transition-all">
                   <div className="flex items-center gap-4">
-                    <Globe size={20} className="text-[#6366f1]" /> 
+                    <Globe size={20} className="text-[#8B5CF6]" /> 
                     <span className="text-sm">System Language</span>
                   </div>
-                  <span className="text-[10px] bg-[#6366f1] px-2 py-0.5 rounded-lg text-white">
+                  <span className="text-[10px] bg-[#8B5CF6] px-2 py-0.5 rounded-lg text-white uppercase font-black">
                     {lang === 'en' ? 'FR' : 'EN'}
                   </span>
                 </button>
