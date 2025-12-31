@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { ShieldCheck, Globe, Instagram, Send, Loader2, GraduationCap } from "lucide-react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import DesktopNav from "./components/layout/DesktopNav";
 import MobileNav from "./components/layout/MobileNav";
@@ -309,6 +310,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </footer>
           )}
         </LanguageContext.Provider>
+        
+        <SpeedInsights />
       </body>
     </html>
   );
